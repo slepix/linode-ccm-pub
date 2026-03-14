@@ -140,6 +140,8 @@ resource "linode_instance" "app" {
       initial_admin_email    = var.initial_admin_email
       initial_admin_password = var.initial_admin_password
       git_repo_url           = var.git_repo_url
+      ssl_domain             = var.ssl_domain
+      ssl_email              = var.ssl_email
     }))
   }
 

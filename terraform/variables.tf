@@ -183,3 +183,15 @@ variable "jwt_expire_minutes" {
   type        = number
   default     = 1440
 }
+
+variable "ssl_domain" {
+  description = "Domain name for SSL certificate (e.g., lccm.example.com). Leave empty to skip automatic SSL setup."
+  type        = string
+  default     = ""
+}
+
+variable "ssl_email" {
+  description = "Email address for Let's Encrypt SSL certificate notifications. Required if ssl_domain is set."
+  type        = string
+  default     = ""
+}

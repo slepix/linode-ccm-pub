@@ -7,11 +7,18 @@ apt-get update -y
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
   git curl ca-certificates gnupg \
   python3 python3-pip python3-venv \
+  nginx certbot python3-certbot-nginx
 
+# Install Docker
 curl -fsSL https://get.docker.com -o get-docker.sh
 sudo sh ./get-docker.sh
 
+# Install Node.js LTS (v20)
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+apt-get install -y nodejs
+
 systemctl enable --now docker
+systemctl enable --now nginx
 
 # ─── Clone application ────────────────────────────────────────────────────────
 APP_DIR="/opt/app"
@@ -87,6 +94,36 @@ python3 -m venv /opt/venv
   --ssl-mode require \
   --write-env
 
+# ─── Configure nginx ──────────────────────────────────────────────────────────
+echo "Configuring nginx..."
+
+# Create webroot directory for static files and certbot challenges
+mkdir -p /var/www/html
+mkdir -p /var/www/certbot
+
+# Copy nginx configuration
+cp "$APP_DIR/nginx.conf" /etc/nginx/sites-available/default
+
+# Build frontend and deploy to nginx webroot
+if command -v npm &> /dev/null; then
+    echo "Building frontend..."
+    cd "$APP_DIR"
+    npm ci --omit=dev
+    npm run build
+    cp -r dist/* /var/www/html/
+    cd -
+else
+    echo "WARNING: npm not found, skipping frontend build"
+fi
+
+# Test and reload nginx
+nginx -t
+systemctl reload nginx
+
+# Copy SSL setup script
+cp "$APP_DIR/setup_ssl.sh" /usr/local/bin/setup_ssl.sh
+chmod +x /usr/local/bin/setup_ssl.sh
+
 # ─── Start application via Docker Compose ────────────────────────────────────
 docker compose -f "$APP_DIR/docker-compose.yml" up -d --build
 
@@ -122,4 +159,21 @@ docker compose -f "$APP_DIR/docker-compose.yml" restart backend
 echo "Registration endpoint disabled."
 %{ endif }
 
+echo ""
+echo "═══════════════════════════════════════════════════════════════"
 echo "Bootstrap complete at $(date -u)"
+echo "═══════════════════════════════════════════════════════════════"
+echo ""
+echo "Application is running on HTTP (port 80)"
+%{ if ssl_domain != "" && ssl_email != "" }
+echo ""
+echo "Configuring SSL for domain: ${ssl_domain}"
+/usr/local/bin/setup_ssl.sh "${ssl_domain}" "${ssl_email}" || echo "SSL setup failed. Run manually: sudo setup_ssl.sh ${ssl_domain} ${ssl_email}"
+%{ else }
+echo ""
+echo "To enable HTTPS with Let's Encrypt, run:"
+echo "  sudo setup_ssl.sh your-domain.com your-email@example.com"
+echo ""
+echo "Make sure your domain points to this server before running."
+%{ endif }
+echo "═══════════════════════════════════════════════════════════════"
