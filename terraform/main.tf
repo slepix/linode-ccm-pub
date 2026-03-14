@@ -24,7 +24,7 @@ locals {
   token_encryption_key = var.token_encryption_key != "" ? var.token_encryption_key : local._raw_fernet_key
 
   vm_label = "${var.env_label}-app"
-  db_label = "${var.env_label}-db"
+  db_label = "linode-ccm-${var.env_label}-db"
 
   common_tags = concat(
     [var.env_label, "terraform"],
