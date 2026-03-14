@@ -68,9 +68,13 @@ jwt_expire_minutes  = 1440   # 24 hours
 trusted_proxy_count = 0      # set to 1 if behind a load balancer / reverse proxy
 
 # ─── SSL / TLS (Let's Encrypt) ────────────────────────────────────────────────
-# Optional: Automatically configure HTTPS with Let's Encrypt during deployment.
-# Leave both empty to skip automatic SSL setup (you can run setup_ssl.sh manually later).
-# Make sure your domain's DNS points to the server before deployment.
+# Set ssl_email to enable automatic HTTPS via Let's Encrypt during deployment.
+#
+# ssl_domain: optional — if left empty, the server's Linode rDNS hostname
+#             (e.g., 1-2-3-4.ip.linodeusercontent.com) is used automatically.
+#
+# ssl_email:  required to enable SSL — used for Let's Encrypt expiry notices.
+#             Leave empty to skip SSL setup entirely.
 
-ssl_domain = ""                    # e.g., "lccm.example.com"
-ssl_email  = ""                    # e.g., "admin@example.com"
+ssl_domain = ""                    # e.g., "lccm.example.com" (optional)
+ssl_email  = ""                    # e.g., "admin@example.com" (set to enable SSL)

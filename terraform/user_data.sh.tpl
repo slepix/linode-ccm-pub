@@ -29,27 +29,38 @@ else
 fi
 cd "$APP_DIR"
 
-# ─── Resolve CORS origins ─────────────────────────────────────────────────────
-# If cors_origins was left empty, derive the Linode rDNS hostname from the
-# instance's public IP via the metadata service (no circular Terraform dep).
+# ─── Resolve public IP and rDNS hostname ──────────────────────────────────────
+# Derive the Linode rDNS hostname from the instance's public IP via the
+# metadata service (no circular Terraform dep).
 # API: PUT /v1/token → token, then GET /v1/network → ipv4.public[0]
+META_TOKEN=$(curl -sf --connect-timeout 5 -X PUT \
+  -H "Metadata-Token-Expiry-Seconds: 60" \
+  http://169.254.169.254/v1/token 2>/dev/null || true)
+if [ -n "$META_TOKEN" ]; then
+  PUBLIC_IP=$(curl -sf --connect-timeout 5 \
+    -H "Metadata-Token: $META_TOKEN" \
+    -H "Accept: application/json" \
+    http://169.254.169.254/v1/network 2>/dev/null \
+    | grep -oP '"public":\s*\["\K[^"]+' | head -1 | cut -d'/' -f1 || true)
+fi
+if [ -z "$${PUBLIC_IP:-}" ]; then
+  PUBLIC_IP=$(hostname -I | awk '{print $1}')
+fi
+IP_DASHES=$(echo "$PUBLIC_IP" | tr '.' '-')
+RDNS_HOSTNAME="$${IP_DASHES}.ip.linodeusercontent.com"
+echo "Resolved rDNS hostname: $RDNS_HOSTNAME"
+
+# ─── Resolve SSL domain ───────────────────────────────────────────────────────
+# Determine the effective domain for SSL (and CORS) before writing .env
+SSL_DOMAIN_EFFECTIVE="${ssl_domain}"
+if [ -z "$SSL_DOMAIN_EFFECTIVE" ]; then
+  SSL_DOMAIN_EFFECTIVE="$RDNS_HOSTNAME"
+fi
+
+# ─── Resolve CORS origins ─────────────────────────────────────────────────────
 CORS_ORIGINS_VALUE="${cors_origins}"
 if [ -z "$CORS_ORIGINS_VALUE" ]; then
-  META_TOKEN=$(curl -sf --connect-timeout 5 -X PUT \
-    -H "Metadata-Token-Expiry-Seconds: 60" \
-    http://169.254.169.254/v1/token 2>/dev/null || true)
-  if [ -n "$META_TOKEN" ]; then
-    PUBLIC_IP=$(curl -sf --connect-timeout 5 \
-      -H "Metadata-Token: $META_TOKEN" \
-      -H "Accept: application/json" \
-      http://169.254.169.254/v1/network 2>/dev/null \
-      | grep -oP '"public":\s*\["\K[^"]+' | head -1 | cut -d'/' -f1 || true)
-  fi
-  if [ -z "$${PUBLIC_IP:-}" ]; then
-    PUBLIC_IP=$(hostname -I | awk '{print $1}')
-  fi
-  IP_DASHES=$(echo "$PUBLIC_IP" | tr '.' '-')
-  CORS_ORIGINS_VALUE="http://$${IP_DASHES}.ip.linodeusercontent.com"
+  CORS_ORIGINS_VALUE="https://$SSL_DOMAIN_EFFECTIVE"
   echo "Auto-derived CORS origin: $CORS_ORIGINS_VALUE"
 fi
 
@@ -159,21 +170,22 @@ docker compose -f "$APP_DIR/docker-compose.yml" restart backend
 echo "Registration endpoint disabled."
 %{ endif }
 
+%{ if ssl_email != "" }
+# ─── SSL / Let's Encrypt setup ────────────────────────────────────────────────
+# SSL_DOMAIN_EFFECTIVE was resolved earlier (provided domain or rDNS fallback)
+echo ""
+echo "Configuring SSL for domain: $SSL_DOMAIN_EFFECTIVE"
+/usr/local/bin/setup_ssl.sh "$SSL_DOMAIN_EFFECTIVE" "${ssl_email}" \
+  && echo "SSL configured successfully for $SSL_DOMAIN_EFFECTIVE" \
+  || echo "SSL setup failed. Run manually: sudo setup_ssl.sh $SSL_DOMAIN_EFFECTIVE ${ssl_email}"
+%{ else }
+echo ""
+echo "SSL not configured (ssl_email not set)."
+echo "To enable HTTPS with Let's Encrypt, run:"
+echo "  sudo setup_ssl.sh your-domain.com your-email@example.com"
+%{ endif }
+
 echo ""
 echo "═══════════════════════════════════════════════════════════════"
 echo "Bootstrap complete at $(date -u)"
-echo "═══════════════════════════════════════════════════════════════"
-echo ""
-echo "Application is running on HTTP (port 80)"
-%{ if ssl_domain != "" && ssl_email != "" }
-echo ""
-echo "Configuring SSL for domain: ${ssl_domain}"
-/usr/local/bin/setup_ssl.sh "${ssl_domain}" "${ssl_email}" || echo "SSL setup failed. Run manually: sudo setup_ssl.sh ${ssl_domain} ${ssl_email}"
-%{ else }
-echo ""
-echo "To enable HTTPS with Let's Encrypt, run:"
-echo "  sudo setup_ssl.sh your-domain.com your-email@example.com"
-echo ""
-echo "Make sure your domain points to this server before running."
-%{ endif }
 echo "═══════════════════════════════════════════════════════════════"

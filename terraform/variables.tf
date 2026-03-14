@@ -185,13 +185,13 @@ variable "jwt_expire_minutes" {
 }
 
 variable "ssl_domain" {
-  description = "Domain name for SSL certificate (e.g., lccm.example.com). Leave empty to skip automatic SSL setup."
+  description = "Domain name for SSL certificate (e.g., lccm.example.com). If ssl_email is set but this is empty, the server's Linode rDNS hostname is used automatically."
   type        = string
   default     = ""
 }
 
 variable "ssl_email" {
-  description = "Email address for Let's Encrypt SSL certificate notifications. Required if ssl_domain is set."
+  description = "Email address for Let's Encrypt certificate notifications. Setting this enables automatic SSL. If ssl_domain is empty, the server's rDNS hostname (e.g., 1-2-3-4.ip.linodeusercontent.com) is used."
   type        = string
   default     = ""
 }
