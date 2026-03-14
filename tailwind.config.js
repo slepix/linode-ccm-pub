@@ -1,0 +1,41 @@
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        lnblack: 'var(--ln-black)',
+        lndark: 'var(--ln-dark)',
+        lnbg: 'var(--ln-bg)',
+        lncard: 'var(--ln-card)',
+        lnborder: 'var(--ln-border)',
+        lnborder2: 'var(--ln-border2)',
+        lntext: 'var(--ln-text)',
+        lnmuted: 'var(--ln-muted)',
+        lnfaint: 'var(--ln-faint)',
+        lncyan: '#17a2b8',
+        lncyan2: '#1bbcd4',
+        lngreen: '#1cb35b',
+        lnred: '#cf3235',
+        lnamber: '#e5a225',
+        lnblue: '#0e73e4',
+        lnblue2: '#1680e4',
+        lnpurple: '#9851d6',
+        'ln-icon-blue': 'var(--ln-icon-blue-bg)',
+        'ln-icon-amber': 'var(--ln-icon-amber-bg)',
+        'ln-icon-green': 'var(--ln-icon-green-bg)',
+        'ln-icon-cyan': 'var(--ln-icon-cyan-bg)',
+        'ln-icon-red': 'var(--ln-icon-red-bg)',
+        'ln-icon-sky': 'var(--ln-icon-sky-bg)',
+        'ln-icon-orange': 'var(--ln-icon-orange-bg)',
+        'ln-icon-teal': 'var(--ln-icon-teal-bg)',
+        'ln-hover': 'var(--ln-hover-bg)',
+      },
+      fontFamily: {
+        sans: ['"Source Sans 3"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+      },
+    },
+  },
+  plugins: [],
+};

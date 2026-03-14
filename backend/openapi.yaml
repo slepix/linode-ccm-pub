@@ -1,0 +1,1735 @@
+openapi: 3.0.3
+info:
+  title: Akamai CCM API
+  version: 1.0.0
+  description: >
+    Cloud Compliance Manager API for managing Linode accounts, resources,
+    compliance rules, reports, and users.
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+  - url: https://<your-host>
+    description: Production
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        role:
+          type: string
+          enum: [admin, power_user, auditor]
+        can_view_costs:
+          type: boolean
+        can_view_compliance:
+          type: boolean
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: '#/components/schemas/User'
+
+    Account:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        api_token:
+          type: string
+        webhook_api_key:
+          type: string
+          nullable: true
+        last_sync_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_evaluated_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Resource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        resource_type:
+          type: string
+        label:
+          type: string
+        region:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ResourceSnapshot:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        resource_id:
+          type: string
+          format: uuid
+        synced_at:
+          type: string
+          format: date-time
+
+    ComplianceRule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        severity:
+          type: string
+          enum: [critical, warning, info]
+        resource_types:
+          type: array
+          items:
+            type: string
+        condition_type:
+          type: string
+        condition_config:
+          type: object
+        is_overridden_disabled:
+          type: boolean
+        account_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    ComplianceResult:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        rule_id:
+          type: string
+          format: uuid
+        resource_id:
+          type: string
+          format: uuid
+          nullable: true
+        account_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [compliant, non_compliant, not_applicable]
+        detail:
+          type: string
+        acknowledged:
+          type: boolean
+        acknowledged_at:
+          type: string
+          format: date-time
+          nullable: true
+        acknowledged_note:
+          type: string
+          nullable: true
+        acknowledged_by:
+          type: string
+          format: uuid
+          nullable: true
+        acknowledged_by_name:
+          type: string
+          nullable: true
+        evaluated_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        rule:
+          $ref: '#/components/schemas/ComplianceRule'
+        resource:
+          $ref: '#/components/schemas/Resource'
+          nullable: true
+
+    ComplianceNote:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        compliance_result_id:
+          type: string
+          format: uuid
+        note:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        author_name:
+          type: string
+          nullable: true
+
+    ComplianceProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        tier:
+          type: string
+        rule_condition_types:
+          type: array
+          items:
+            type: string
+
+    ComplianceScoreHistory:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        evaluated_at:
+          type: string
+          format: date-time
+
+    RuleOverride:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        rule_id:
+          type: string
+          format: uuid
+        is_active:
+          type: boolean
+        created_by:
+          type: string
+          format: uuid
+        applied_by_profile_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    RuleConfig:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        rule_id:
+          type: string
+          format: uuid
+        config_override:
+          type: object
+        created_by:
+          type: string
+          format: uuid
+        updated_at:
+          type: string
+          format: date-time
+
+    Report:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        period_start:
+          type: string
+          format: date-time
+        period_end:
+          type: string
+          format: date-time
+        quarter:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [generating, ready]
+        created_by:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        snapshot:
+          type: object
+          nullable: true
+
+    Event:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        action:
+          type: string
+        entity_type:
+          type: string
+        status:
+          type: string
+        username:
+          type: string
+        event_created:
+          type: string
+          format: date-time
+
+    UserAccess:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        account_name:
+          type: string
+        granted_by:
+          type: string
+          format: uuid
+        can_view_costs:
+          type: boolean
+        can_view_compliance:
+          type: boolean
+
+    RefreshResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        accounts_processed:
+          type: integer
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              account_id:
+                type: string
+                format: uuid
+              sync:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  count:
+                    type: integer
+              eval:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+              error:
+                type: string
+                nullable: true
+        log:
+          type: array
+          items:
+            type: string
+        completed_at:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      properties:
+        detail:
+          type: string
+
+security:
+  - bearerAuth: []
+
+paths:
+
+  # ─── Health ───────────────────────────────────────────────────────────────
+
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  # ─── Auth ─────────────────────────────────────────────────────────────────
+
+  /api/auth/registration-open:
+    get:
+      tags: [Auth]
+      summary: Check if registration is open
+      description: Returns true when no users exist and first-time registration is allowed.
+      security: []
+      responses:
+        '200':
+          description: Registration status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  open:
+                    type: boolean
+
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register first admin user
+      description: Only succeeds when no users exist in the system.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                full_name:
+                  type: string
+                  default: ''
+      responses:
+        '200':
+          description: Registered and authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Registration is closed (users already exist)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current user
+      responses:
+        '200':
+          description: Current authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ─── Accounts ─────────────────────────────────────────────────────────────
+
+  /api/accounts:
+    get:
+      tags: [Accounts]
+      summary: List accounts
+      responses:
+        '200':
+          description: List of accessible accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Account'
+    post:
+      tags: [Accounts]
+      summary: Create account
+      description: Requires `power_user` or `admin` role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, api_token]
+              properties:
+                name:
+                  type: string
+                api_token:
+                  type: string
+                webhook_api_key:
+                  type: string
+      responses:
+        '200':
+          description: Created account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '403':
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/accounts/{account_id}:
+    parameters:
+      - name: account_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Accounts]
+      summary: Get account details
+      responses:
+        '200':
+          description: Account details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '404':
+          description: Account not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags: [Accounts]
+      summary: Update account
+      description: Requires `power_user` or `admin` role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                api_token:
+                  type: string
+                webhook_api_key:
+                  type: string
+      responses:
+        '200':
+          description: Updated account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+    delete:
+      tags: [Accounts]
+      summary: Delete account
+      description: Requires `admin` role.
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+
+  # ─── Resources ────────────────────────────────────────────────────────────
+
+  /api/resources:
+    get:
+      tags: [Resources]
+      summary: List resources
+      parameters:
+        - name: account_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: resource_type
+          in: query
+          schema:
+            type: string
+        - name: region
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of resources
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Resource'
+
+  /api/resources/{resource_id}:
+    parameters:
+      - name: resource_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Resources]
+      summary: Get resource details
+      responses:
+        '200':
+          description: Resource details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resource'
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/resources/{resource_id}/snapshots:
+    parameters:
+      - name: resource_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Resources]
+      summary: Get resource snapshots
+      description: Returns the 50 most recent sync snapshots for a resource.
+      responses:
+        '200':
+          description: List of snapshots
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ResourceSnapshot'
+
+  # ─── Compliance ───────────────────────────────────────────────────────────
+
+  /api/compliance/results:
+    get:
+      tags: [Compliance]
+      summary: List compliance results
+      parameters:
+        - name: account_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [compliant, non_compliant, not_applicable]
+        - name: severity
+          in: query
+          schema:
+            type: string
+            enum: [critical, warning, info]
+        - name: resource_type
+          in: query
+          schema:
+            type: string
+        - name: rule_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of compliance results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ComplianceResult'
+
+  /api/compliance/results/bulk-acknowledge:
+    put:
+      tags: [Compliance]
+      summary: Bulk acknowledge compliance results
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [result_ids, acknowledged]
+              properties:
+                result_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                acknowledged:
+                  type: boolean
+                acknowledged_note:
+                  type: string
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  updated:
+                    type: integer
+
+  /api/compliance/results/{result_id}/acknowledge:
+    parameters:
+      - name: result_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags: [Compliance]
+      summary: Acknowledge a compliance result
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [acknowledged]
+              properties:
+                acknowledged:
+                  type: boolean
+                acknowledged_note:
+                  type: string
+      responses:
+        '200':
+          description: Updated acknowledgement
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  acknowledged:
+                    type: boolean
+                  acknowledged_at:
+                    type: string
+                    format: date-time
+                    nullable: true
+                  acknowledged_note:
+                    type: string
+                    nullable: true
+
+  /api/compliance/results/{result_id}/notes:
+    parameters:
+      - name: result_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Compliance]
+      summary: Get notes for a compliance result
+      responses:
+        '200':
+          description: List of notes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ComplianceNote'
+    post:
+      tags: [Compliance]
+      summary: Add note to a compliance result
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [note]
+              properties:
+                note:
+                  type: string
+      responses:
+        '200':
+          description: Created note
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceNote'
+
+  /api/compliance/score:
+    get:
+      tags: [Compliance]
+      summary: Get current compliance score
+      parameters:
+        - name: account_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Latest compliance score
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceScoreHistory'
+
+  /api/compliance/score/history:
+    get:
+      tags: [Compliance]
+      summary: Get compliance score history
+      parameters:
+        - name: account_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Score history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ComplianceScoreHistory'
+
+  /api/compliance/resources/{resource_id}/timeline:
+    parameters:
+      - name: resource_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Compliance]
+      summary: Get compliance timeline for a resource
+      parameters:
+        - name: account_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Resource compliance timeline
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  snapshots:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        snapshot_time:
+                          type: string
+                          format: date-time
+                        compliant:
+                          type: integer
+                        non_compliant:
+                          type: integer
+                        not_applicable:
+                          type: integer
+                        total:
+                          type: integer
+                        compliance_score:
+                          type: number
+                          format: float
+                  rule_history:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        rule_id:
+                          type: string
+                          format: uuid
+                        rule_name:
+                          type: string
+                        severity:
+                          type: string
+                        resource_types:
+                          type: array
+                          items:
+                            type: string
+                        snapshot_time:
+                          type: string
+                          format: date-time
+                        status:
+                          type: string
+                        detail:
+                          type: string
+
+  /api/compliance/rules:
+    get:
+      tags: [Compliance]
+      summary: List compliance rules
+      parameters:
+        - name: account_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: If provided, includes account-specific overrides
+      responses:
+        '200':
+          description: List of rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ComplianceRule'
+
+  /api/compliance/rules/overrides:
+    get:
+      tags: [Compliance]
+      summary: Get rule overrides for an account
+      parameters:
+        - name: account_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of rule overrides
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RuleOverride'
+
+  /api/compliance/rules/{rule_id}/override:
+    parameters:
+      - name: rule_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags: [Compliance]
+      summary: Set rule override
+      description: Enable or disable a rule for an account. Requires `admin` role.
+      parameters:
+        - name: account_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [is_active]
+              properties:
+                is_active:
+                  type: boolean
+      responses:
+        '200':
+          description: Override applied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  rule_id:
+                    type: string
+                    format: uuid
+                  is_active:
+                    type: boolean
+
+  /api/compliance/rules/{rule_id}/config:
+    parameters:
+      - name: rule_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Compliance]
+      summary: Get rule config override
+      parameters:
+        - name: account_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Rule configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuleConfig'
+    put:
+      tags: [Compliance]
+      summary: Set rule config override
+      description: Requires `admin` role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [account_id, config_override]
+              properties:
+                account_id:
+                  type: string
+                  format: uuid
+                config_override:
+                  type: object
+      responses:
+        '200':
+          description: Updated config
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuleConfig'
+
+  /api/compliance/profiles:
+    get:
+      tags: [Compliance]
+      summary: List compliance profiles
+      responses:
+        '200':
+          description: List of profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ComplianceProfile'
+
+  /api/compliance/profiles/active:
+    get:
+      tags: [Compliance]
+      summary: Get active profiles for an account
+      parameters:
+        - name: account_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Active profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ComplianceProfile'
+    put:
+      tags: [Compliance]
+      summary: Set active profiles for an account
+      description: Requires `admin` role.
+      parameters:
+        - name: account_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_ids]
+              properties:
+                profile_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        '200':
+          description: Profiles updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  profile_ids:
+                    type: array
+                    items:
+                      type: string
+                      format: uuid
+
+  /api/compliance/profiles/{profile_id}/activate:
+    parameters:
+      - name: profile_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags: [Compliance]
+      summary: Activate or deactivate a profile
+      description: Requires `admin` role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [account_id, active]
+              properties:
+                account_id:
+                  type: string
+                  format: uuid
+                active:
+                  type: boolean
+      responses:
+        '200':
+          description: Profile activation updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+
+  # ─── Reports ──────────────────────────────────────────────────────────────
+
+  /api/reports:
+    get:
+      tags: [Reports]
+      summary: List reports
+      parameters:
+        - name: account_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of reports
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Report'
+    post:
+      tags: [Reports]
+      summary: Create a compliance report
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [account_id, title, period_start, period_end]
+              properties:
+                account_id:
+                  type: string
+                  format: uuid
+                title:
+                  type: string
+                description:
+                  type: string
+                  default: ''
+                period_start:
+                  type: string
+                  format: date-time
+                period_end:
+                  type: string
+                  format: date-time
+                quarter:
+                  type: string
+      responses:
+        '200':
+          description: Created report with snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Report'
+
+  /api/reports/{report_id}:
+    parameters:
+      - name: report_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Reports]
+      summary: Get report details
+      responses:
+        '200':
+          description: Full report with snapshot data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Report'
+        '404':
+          description: Report not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Reports]
+      summary: Delete a report
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+
+  # ─── Events ───────────────────────────────────────────────────────────────
+
+  /api/events:
+    get:
+      tags: [Events]
+      summary: List events
+      parameters:
+        - name: account_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: entity_type
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: username
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 200
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Event'
+
+  # ─── Users ────────────────────────────────────────────────────────────────
+
+  /api/users:
+    get:
+      tags: [Users]
+      summary: List all users
+      description: Requires `admin` role.
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+    post:
+      tags: [Users]
+      summary: Create a user
+      description: Requires `admin` role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                full_name:
+                  type: string
+                  default: ''
+                role:
+                  type: string
+                  enum: [admin, power_user, auditor]
+                  default: auditor
+                can_view_costs:
+                  type: boolean
+                  default: true
+                can_view_compliance:
+                  type: boolean
+                  default: true
+      responses:
+        '200':
+          description: Created user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /api/users/{user_id}:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags: [Users]
+      summary: Update a user
+      description: Requires `admin` role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full_name:
+                  type: string
+                role:
+                  type: string
+                  enum: [admin, power_user, auditor]
+                is_active:
+                  type: boolean
+                can_view_costs:
+                  type: boolean
+                can_view_compliance:
+                  type: boolean
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+    delete:
+      tags: [Users]
+      summary: Delete a user
+      description: Requires `admin` role.
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+
+  /api/users/{user_id}/access:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Users]
+      summary: Get user account access
+      description: Requires `admin` role.
+      responses:
+        '200':
+          description: List of access grants
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserAccess'
+    post:
+      tags: [Users]
+      summary: Grant account access to user
+      description: Requires `admin` role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [account_id]
+              properties:
+                account_id:
+                  type: string
+                  format: uuid
+                can_view_costs:
+                  type: boolean
+                  default: true
+                can_view_compliance:
+                  type: boolean
+                  default: true
+      responses:
+        '200':
+          description: Access granted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  granted:
+                    type: boolean
+
+  /api/users/{user_id}/access/{account_id}:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: account_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      tags: [Users]
+      summary: Revoke user account access
+      description: Requires `admin` role.
+      responses:
+        '200':
+          description: Access revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  revoked:
+                    type: boolean
+
+  # ─── Refresh / Sync ───────────────────────────────────────────────────────
+
+  /api/refresh:
+    post:
+      tags: [Refresh]
+      summary: Trigger sync and compliance evaluation
+      description: Requires `power_user` or `admin` role. Omit `account_id` to process all accounts.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                account_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                skip_sync:
+                  type: boolean
+                  default: false
+                skip_eval:
+                  type: boolean
+                  default: false
+      responses:
+        '200':
+          description: Refresh result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshResult'
+    get:
+      tags: [Refresh]
+      summary: Trigger refresh via GET (webhook / cron)
+      description: >
+        Auth is optional — only required if `REFRESH_API_SECRET` is configured on the server.
+        Pass the token via `?token=` query parameter or `Authorization: Bearer` header.
+      security: []
+      parameters:
+        - name: account_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: token
+          in: query
+          schema:
+            type: string
+          description: API secret token (alternative to Authorization header)
+        - name: skip_sync
+          in: query
+          schema:
+            type: boolean
+        - name: skip_eval
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Refresh result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshResult'
+
+  /api/refresh/stream:
+    get:
+      tags: [Refresh]
+      summary: Stream refresh progress (SSE)
+      description: >
+        Returns a Server-Sent Events stream. Requires `power_user` or `admin` role.
+
+        **Event types:**
+        - `phase` — Phase started (`sync` or `evaluate`)
+        - `sync_done` — Sync completed with resource count
+        - `eval_done` — Evaluation phase completed
+        - `log` — Log message string
+        - `done` — Final summary object
+        - `error` — Error message string
+      parameters:
+        - name: account_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: skip_sync
+          in: query
+          schema:
+            type: boolean
+        - name: skip_eval
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  # ─── Admin ────────────────────────────────────────────────────────────────
+
+  /api/admin/run-migrations:
+    post:
+      tags: [Admin]
+      summary: Run database migrations
+      description: Requires `admin` role.
+      responses:
+        '200':
+          description: Migrations completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+
+tags:
+  - name: Health
+    description: Service health check
+  - name: Auth
+    description: Authentication and current user
+  - name: Accounts
+    description: Linode account management
+  - name: Resources
+    description: Synced Linode resources
+  - name: Compliance
+    description: Compliance rules, results, profiles, and scores
+  - name: Reports
+    description: Compliance reports
+  - name: Events
+    description: Linode event log
+  - name: Users
+    description: User management and access control
+  - name: Refresh
+    description: Sync and compliance evaluation triggers
+  - name: Admin
+    description: Administrative operations

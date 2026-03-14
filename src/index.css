@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --ln-black: #0c0f12;
+    --ln-dark: #14181d;
+    --ln-bg: #1c2126;
+    --ln-card: #22282f;
+    --ln-border: #2d3540;
+    --ln-border2: #3a4451;
+    --ln-text: #e2eaf5;
+    --ln-muted: #9baab8;
+    --ln-faint: #5f7080;
+  }
+
+  :root.light {
+    --ln-black: #f0f2f5;
+    --ln-dark: #ffffff;
+    --ln-bg: #f5f7fa;
+    --ln-card: #ffffff;
+    --ln-border: #dde2ea;
+    --ln-border2: #c8d0db;
+    --ln-text: #0f1923;
+    --ln-muted: #4a5568;
+    --ln-faint: #8896a8;
+    --ln-icon-blue-bg: #dbeafe;
+    --ln-icon-amber-bg: #fef3c7;
+    --ln-icon-green-bg: #dcfce7;
+    --ln-icon-cyan-bg: #cffafe;
+    --ln-icon-red-bg: #fee2e2;
+    --ln-icon-sky-bg: #e0f2fe;
+    --ln-icon-orange-bg: #ffedd5;
+    --ln-icon-teal-bg: #ccfbf1;
+    --ln-icon-amber-border: #fde68a;
+    --ln-icon-blue-border: #bfdbfe;
+    --ln-hover-bg: rgba(0, 0, 0, 0.04);
+  }
+
+  :root {
+    --ln-icon-blue-bg: rgba(30, 58, 138, 0.3);
+    --ln-icon-amber-bg: rgba(120, 53, 15, 0.3);
+    --ln-icon-green-bg: rgba(20, 83, 45, 0.3);
+    --ln-icon-cyan-bg: rgba(22, 78, 99, 0.3);
+    --ln-icon-red-bg: rgba(127, 29, 29, 0.3);
+    --ln-icon-sky-bg: rgba(12, 74, 110, 0.3);
+    --ln-icon-orange-bg: rgba(124, 45, 18, 0.3);
+    --ln-icon-teal-bg: rgba(19, 78, 74, 0.3);
+    --ln-icon-amber-border: rgba(146, 64, 14, 0.5);
+    --ln-icon-blue-border: rgba(30, 58, 138, 0.5);
+    --ln-hover-bg: rgba(255, 255, 255, 0.05);
+  }
+
+  html {
+    font-family: 'Source Sans 3', ui-sans-serif, system-ui, sans-serif;
+    font-size: 110%;
+  }
+
+  body {
+    background-color: var(--ln-bg);
+    color: var(--ln-text);
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--ln-border);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--ln-border2);
+  }
+}
