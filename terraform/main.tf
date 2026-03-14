@@ -114,10 +114,6 @@ resource "linode_instance" "app" {
   tags            = local.common_tags
 
   interface {
-    purpose   = "public"
-  }
-
-  interface {
     purpose   = "vpc"
     subnet_id = linode_vpc_subnet.app.id
   }
