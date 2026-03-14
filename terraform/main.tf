@@ -117,7 +117,7 @@ resource "linode_instance" "app" {
     purpose   = "vpc"
     subnet_id = linode_vpc_subnet.app.id
     ipv4 {
-      vpc     = var.instance_vpc_ip
+      vpc     = linode_vpc.app.id
       nat_1_1 = "any"
     }
   }
