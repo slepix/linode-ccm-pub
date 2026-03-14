@@ -100,15 +100,25 @@ variable "db_updates_hour_of_day" {
 # ─── Application ──────────────────────────────────────────────────────────────
 
 variable "app_db_name" {
-  description = "Application database name created by setup_db.py after provisioning."
+  description = "Application database name created by setup_db.py after provisioning. Must use only letters, digits, and underscores (no hyphens)."
   type        = string
   default     = "appdb"
+
+  validation {
+    condition     = can(regex("^[a-zA-Z_][a-zA-Z0-9_]*$", var.app_db_name))
+    error_message = "app_db_name must contain only letters, digits, and underscores, starting with a letter or underscore (no hyphens allowed)."
+  }
 }
 
 variable "app_db_user" {
-  description = "Application database username created by setup_db.py after provisioning."
+  description = "Application database username created by setup_db.py after provisioning. Must use only letters, digits, and underscores (no hyphens)."
   type        = string
   default     = "appuser"
+
+  validation {
+    condition     = can(regex("^[a-zA-Z_][a-zA-Z0-9_]*$", var.app_db_user))
+    error_message = "app_db_user must contain only letters, digits, and underscores, starting with a letter or underscore (no hyphens allowed)."
+  }
 }
 
 variable "jwt_secret" {

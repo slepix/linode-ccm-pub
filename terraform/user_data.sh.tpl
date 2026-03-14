@@ -36,7 +36,7 @@ if [ -z "$CORS_ORIGINS_VALUE" ]; then
       -H "Metadata-Token: $META_TOKEN" \
       -H "Accept: application/json" \
       http://169.254.169.254/v1/network 2>/dev/null \
-      | grep -oP '"public":\s*\["\K[^"]+' | head -1 || true)
+      | grep -oP '"public":\s*\["\K[^"]+' | head -1 | cut -d'/' -f1 || true)
   fi
   if [ -z "$${PUBLIC_IP:-}" ]; then
     PUBLIC_IP=$(hostname -I | awk '{print $1}')

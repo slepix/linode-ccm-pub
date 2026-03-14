@@ -37,6 +37,7 @@ db_updates_day_of_week = 7        # Sunday
 db_updates_hour_of_day = 3        # 03:00 UTC
 
 # ─── Application database (created by setup_db.py) ────────────────────────────
+# IMPORTANT: Use only letters, digits, and underscores (no hyphens!)
 
 app_db_name = "appdb"
 app_db_user = "appuser"
