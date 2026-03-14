@@ -47,7 +47,7 @@ if [ -z "$CORS_ORIGINS_VALUE" ]; then
 fi
 
 # ─── Write backend/.env ───────────────────────────────────────────────────────
-cat > "$APP_DIR/backend/.env" <<ENVEOF
+cat > "$APP_DIR/backend/.env" <<'ENVEOF'
 DB_HOST=${db_host}
 DB_PORT=${db_port}
 DB_NAME=${db_name}
@@ -63,10 +63,13 @@ REFRESH_API_SECRET=${refresh_api_secret}
 
 TOKEN_ENCRYPTION_KEY=${token_encryption_key}
 
-CORS_ORIGINS=$CORS_ORIGINS_VALUE
+CORS_ORIGINS=CORS_PLACEHOLDER
 ALLOW_REGISTRATION=${allow_registration}
 TRUSTED_PROXY_COUNT=${trusted_proxy_count}
 ENVEOF
+
+# Replace CORS placeholder with actual value (after heredoc to avoid bash expansion)
+sed -i "s|CORS_PLACEHOLDER|$CORS_ORIGINS_VALUE|g" "$APP_DIR/backend/.env"
 chmod 600 "$APP_DIR/backend/.env"
 
 # ─── Run setup_db.py (creates app db/user + runs migrations) ──────────────────
