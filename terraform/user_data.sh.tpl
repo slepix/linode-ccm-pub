@@ -7,7 +7,9 @@ apt-get update -y
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
   git curl ca-certificates gnupg \
   python3 python3-pip python3-venv \
-  docker.io docker-compose-plugin
+
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh ./get-docker.sh
 
 systemctl enable --now docker
 
