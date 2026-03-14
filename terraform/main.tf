@@ -112,6 +112,7 @@ resource "linode_instance" "app" {
   root_pass       = var.vm_root_password
   authorized_keys = var.vm_ssh_keys
   tags            = local.common_tags
+  interface_generation = "linode"
 
   interface {
     purpose   = "vpc"
