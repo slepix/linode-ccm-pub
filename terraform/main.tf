@@ -23,7 +23,7 @@ locals {
   _raw_fernet_key      = replace(replace(random_bytes.token_encryption_key.base64, "+", "-"), "/", "_")
   token_encryption_key = var.token_encryption_key != "" ? var.token_encryption_key : local._raw_fernet_key
 
-  vm_label = "${var.env_label}-app"
+  vm_label = "linode-ccm-${var.env_label}-app"
   db_label = "linode-ccm-${var.env_label}-db"
 
   common_tags = concat(
