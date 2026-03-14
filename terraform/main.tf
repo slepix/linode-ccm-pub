@@ -170,7 +170,7 @@ resource "linode_database_postgresql_v2" "app" {
     frequency   = "weekly"
     day_of_week = var.db_updates_day_of_week
     hour_of_day = var.db_updates_hour_of_day
-    duration    = 2
+    duration    = 4
   }
 }
 
