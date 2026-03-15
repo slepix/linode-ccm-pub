@@ -182,14 +182,15 @@ def setup_2fa(current_user=Depends(get_current_user), db=Depends(get_db)):
     email = current_user["email"]
     uri = pyotp.totp.TOTP(secret).provisioning_uri(name=email, issuer_name=app_name)
 
-    img = qrcode.make(uri)
+    factory = qrcode.image.svg.SvgPathImage
+    img = qrcode.make(uri, image_factory=factory)
     buf = io.BytesIO()
-    img.save(buf, format="PNG")
+    img.save(buf)
     qr_b64 = base64.b64encode(buf.getvalue()).decode()
 
     return {
         "secret": secret,
-        "qr_code": f"data:image/png;base64,{qr_b64}",
+        "qr_code": f"data:image/svg+xml;base64,{qr_b64}",
         "uri": uri,
     }
 
