@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Server, HardDrive, Database, Cloud, Shield, Network, Box, Loader2, ChevronDown, ChevronRight, Download, Clock } from 'lucide-react';
+import { Server, HardDrive, Database, Cloud, Shield, Network, Box, Loader2, ChevronDown, ChevronRight, Download, Clock, Globe } from 'lucide-react';
 import { LinodeAccount } from '../api/accounts';
 import { resourcesApi, Resource } from '../api/resources';
 import { complianceApi } from '../api/compliance';
@@ -17,6 +17,7 @@ const TYPE_META: Record<string, { icon: React.ElementType; color: string; label:
   vpc:            { icon: Network,  color: 'bg-ln-icon-sky text-lnblue2',       label: 'VPCs' },
   lke_cluster:    { icon: Box,      color: 'bg-ln-icon-orange text-lnamber',    label: 'LKE Clusters' },
   nodebalancer:   { icon: Network,  color: 'bg-ln-icon-teal text-lncyan',       label: 'NodeBalancers' },
+  domain:         { icon: Globe,    color: 'bg-ln-icon-green text-lngreen',     label: 'Domains' },
 };
 
 const STATUS_COLORS: Record<string, string> = {

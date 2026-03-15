@@ -90,6 +90,9 @@ class LinodeClient:
             raise ValueError(f"Invalid database id: {db_id!r}")
         return self._get(f"/databases/{engine}/instances/{db_id}")
 
+    def get_domains(self) -> list:
+        return self._get_all_pages("/domains")
+
     def get_firewalls(self) -> list:
         return self._get_all_pages("/networking/firewalls")
 

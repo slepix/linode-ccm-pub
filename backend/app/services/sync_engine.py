@@ -121,6 +121,9 @@ def _collect_api_data(api_token: str, log: list, account_id: str) -> dict:
             continue
         db_details_map[db_item["id"]] = client.get_database_detail(engine, db_item["id"]) or {}
 
+    logmsg("Fetching domains...")
+    domains_raw = client.get_domains()
+
     logmsg("Fetching events...")
     events_raw = client.get_events()
 
@@ -142,6 +145,7 @@ def _collect_api_data(api_token: str, log: list, account_id: str) -> dict:
         "bucket_access_map": bucket_access_map,
         "dbs_raw": dbs_raw,
         "db_details_map": db_details_map,
+        "domains_raw": domains_raw,
         "events_raw": events_raw,
     }
 
@@ -366,6 +370,27 @@ def _write_to_db(account_id: str, data: dict, db, log: list, now: datetime) -> t
         rid = upsert_resource(
             str(db_item["id"]), "database", db_item["label"], db_item.get("region"),
             db_item.get("status"), specs, None, db_item.get("type"), 0, db_item.get("created")
+        )
+        synced_resource_ids.add(rid)
+        resource_count += 1
+
+    logmsg("Writing domains...")
+    for dom in data["domains_raw"]:
+        specs = {
+            "type": dom.get("type"),
+            "status": dom.get("status"),
+            "soa_email": dom.get("soa_email", ""),
+            "ttl_sec": dom.get("ttl_sec"),
+            "retry_sec": dom.get("retry_sec"),
+            "expire_sec": dom.get("expire_sec"),
+            "refresh_sec": dom.get("refresh_sec"),
+            "description": dom.get("description", ""),
+            "tags": dom.get("tags", []),
+            "group": dom.get("group", ""),
+        }
+        rid = upsert_resource(
+            str(dom["id"]), "domain", dom["domain"], None,
+            dom.get("status"), specs, None, None, 0, dom.get("created")
         )
         synced_resource_ids.add(rid)
         resource_count += 1

@@ -468,6 +468,36 @@ function VPCSpecs({ specs }: { specs: Record<string, unknown> }) {
   );
 }
 
+function DomainSpecs({ specs }: { specs: Record<string, unknown> }) {
+  const status = specs.status as string;
+  const soaEmail = specs.soa_email as string;
+  const ttl = specs.ttl_sec as number;
+  const type = specs.type as string;
+  const description = specs.description as string;
+  const tags = specs.tags as string[];
+
+  return (
+    <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+      <Section title="DNS Configuration">
+        {type && <InfoRow icon={Globe} label="Domain Type" value={<Pill color="blue">{type}</Pill>} />}
+        <InfoRow icon={CheckCircle} label="Status" value={
+          status === 'active' ? <Pill color="green">Active</Pill> : <Pill color="amber">{status ?? 'Unknown'}</Pill>
+        } />
+        {ttl != null && <InfoRow icon={Hash} label="TTL" value={`${ttl}s`} />}
+        {soaEmail ? (
+          <InfoRow icon={AlertCircle} label="SOA Email" value={soaEmail} mono />
+        ) : (
+          <InfoRow icon={AlertCircle} label="SOA Email" value={<Pill color="red">Not configured</Pill>} />
+        )}
+        {description && <InfoRow icon={Layers} label="Description" value={description} />}
+      </Section>
+      <Section title="Tags">
+        <TagsList tags={tags} />
+      </Section>
+    </div>
+  );
+}
+
 function GenericSpecs({ specs }: { specs: Record<string, unknown> }) {
   const entries = Object.entries(specs).filter(([, v]) => v != null && v !== '' && !(Array.isArray(v) && v.length === 0));
 
@@ -519,6 +549,7 @@ export default function ResourceSpecsView({ resource }: Props) {
       case 'lke_cluster':   return <LKESpecs specs={specs} />;
       case 'nodebalancer':  return <NodeBalancerSpecs specs={specs} />;
       case 'vpc':           return <VPCSpecs specs={specs} />;
+      case 'domain':        return <DomainSpecs specs={specs} />;
       default:              return <GenericSpecs specs={specs} />;
     }
   };
