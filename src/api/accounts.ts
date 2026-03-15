@@ -7,6 +7,7 @@ export interface LinodeAccount {
   webhook_api_key?: string;
   last_sync_at?: string;
   last_evaluated_at?: string;
+  sync_interval_minutes?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -14,7 +15,7 @@ export interface LinodeAccount {
 export const accountsApi = {
   list: () => api.get<LinodeAccount[]>('/api/accounts'),
   get: (id: string) => api.get<LinodeAccount>(`/api/accounts/${id}`),
-  create: (data: { name: string; api_token: string; webhook_api_key?: string }) =>
+  create: (data: { name: string; api_token: string; webhook_api_key?: string; sync_interval_minutes?: number | null }) =>
     api.post<LinodeAccount>('/api/accounts', data),
   update: (id: string, data: Partial<LinodeAccount>) =>
     api.put<LinodeAccount>(`/api/accounts/${id}`, data),

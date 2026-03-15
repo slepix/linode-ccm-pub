@@ -68,8 +68,9 @@ def refresh_scheduled(
 ):
     """
     Lightweight endpoint designed to be called externally (e.g. every minute by a cron).
-    Checks the configured sync interval against the last completed sync time and only
-    triggers a full sync when the interval has elapsed. Protected by REFRESH_API_SECRET.
+    Evaluates each account independently: compares its own last_sync_at against its own
+    sync_interval_minutes (falling back to the global default when NULL). Only accounts
+    that are individually due are synced. Protected by REFRESH_API_SECRET.
     """
     if not _check_api_auth(request):
         raise HTTPException(status_code=401, detail="Unauthorized")
@@ -85,39 +86,74 @@ def refresh_scheduled(
 
         cur.execute("SELECT value FROM app_settings WHERE key = 'sync_interval_minutes'")
         row = cur.fetchone()
-        interval_minutes = int(row["value"]) if row else 60
+        global_interval = int(row["value"]) if row else 60
 
         cur.execute(
-            """
-            SELECT MAX(last_sync_at) AS last_sync
-            FROM linode_accounts
-            WHERE last_sync_at IS NOT NULL
-            """
+            "SELECT id, api_token, last_sync_at, sync_interval_minutes FROM linode_accounts"
         )
-        result = cur.fetchone()
-        last_sync = result["last_sync"] if result else None
+        all_accounts = [dict(r) for r in cur.fetchall()]
 
         now = datetime.now(timezone.utc)
+        due_accounts: list[dict] = []
+        skipped_accounts: list[dict] = []
 
-        if last_sync is not None:
+        for acc in all_accounts:
+            interval = acc["sync_interval_minutes"] if acc["sync_interval_minutes"] is not None else global_interval
+            last_sync = acc["last_sync_at"]
+            acc_id = str(acc["id"])
+
+            if last_sync is None:
+                due_accounts.append(acc)
+                continue
+
             if last_sync.tzinfo is None:
                 last_sync = last_sync.replace(tzinfo=timezone.utc)
-            elapsed_seconds = (now - last_sync).total_seconds()
-            elapsed_minutes = elapsed_seconds / 60
-            if elapsed_minutes < interval_minutes:
-                remaining = interval_minutes - elapsed_minutes
-                return {
-                    "skipped": True,
-                    "reason": "Data is fresh",
-                    "last_sync": last_sync.isoformat(),
-                    "interval_minutes": interval_minutes,
-                    "next_sync_in_minutes": round(remaining, 1),
-                }
 
-        result = _do_refresh(None, False, False, db)
-        result["skipped"] = False
-        result["interval_minutes"] = interval_minutes
-        return result
+            elapsed_minutes = (now - last_sync).total_seconds() / 60
+            if elapsed_minutes >= interval:
+                due_accounts.append(acc)
+            else:
+                remaining = round(interval - elapsed_minutes, 1)
+                skipped_accounts.append({
+                    "account_id": acc_id,
+                    "last_sync": last_sync.isoformat(),
+                    "interval_minutes": interval,
+                    "next_sync_in_minutes": remaining,
+                })
+
+        if not due_accounts:
+            return {
+                "skipped": True,
+                "reason": "All accounts are fresh",
+                "accounts": skipped_accounts,
+            }
+
+        log: list = []
+        results = []
+        for acc in due_accounts:
+            acc_id = str(acc["id"])
+            token = decrypt_token(acc["api_token"])
+            acc_result: dict = {"account_id": acc_id}
+            try:
+                count = sync_account(acc_id, token, db, log)
+                acc_result["sync"] = {"success": True, "count": count}
+                eval_result = evaluate_account(acc_id, token, db, log)
+                acc_result["eval"] = eval_result
+            except Exception as e:
+                logger.exception("Scheduled sync/eval error for account %s", acc_id)
+                log.append(f"[{acc_id[:8]}] ERROR: Sync failed. See server logs.")
+                acc_result["error"] = "Sync failed. See server logs."
+            results.append(acc_result)
+
+        return {
+            "skipped": False,
+            "global_interval_minutes": global_interval,
+            "accounts_due": len(due_accounts),
+            "accounts_fresh": len(skipped_accounts),
+            "results": results,
+            "log": log,
+            "completed_at": now.isoformat(),
+        }
     finally:
         _sync_lock.release()
 

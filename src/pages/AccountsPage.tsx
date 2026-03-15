@@ -11,9 +11,10 @@ interface FormState {
   name: string;
   api_token: string;
   webhook_api_key: string;
+  sync_interval_minutes: string;
 }
 
-const empty: FormState = { name: '', api_token: '', webhook_api_key: '' };
+const empty: FormState = { name: '', api_token: '', webhook_api_key: '', sync_interval_minutes: '' };
 
 export default function AccountsPage({ accounts, onChanged }: Props) {
   const [showAdd, setShowAdd] = useState(false);
@@ -28,7 +29,8 @@ export default function AccountsPage({ accounts, onChanged }: Props) {
     setLoading(true);
     setError('');
     try {
-      await accountsApi.create({ name: form.name, api_token: form.api_token, webhook_api_key: form.webhook_api_key || undefined });
+      const intervalVal = form.sync_interval_minutes !== '' ? parseInt(form.sync_interval_minutes, 10) : null;
+      await accountsApi.create({ name: form.name, api_token: form.api_token, webhook_api_key: form.webhook_api_key || undefined, sync_interval_minutes: intervalVal });
       setForm(empty);
       setShowAdd(false);
       onChanged();
@@ -42,9 +44,11 @@ export default function AccountsPage({ accounts, onChanged }: Props) {
   const handleEdit = async (id: string) => {
     setLoading(true);
     try {
+      const intervalVal = editForm.sync_interval_minutes !== '' ? parseInt(editForm.sync_interval_minutes, 10) : null;
       await accountsApi.update(id, {
         name: editForm.name,
         ...(editForm.api_token && { api_token: editForm.api_token }),
+        sync_interval_minutes: intervalVal,
       });
       setEditId(null);
       onChanged();
@@ -68,7 +72,12 @@ export default function AccountsPage({ accounts, onChanged }: Props) {
 
   const startEdit = (acc: LinodeAccount) => {
     setEditId(acc.id);
-    setEditForm({ name: acc.name, api_token: '', webhook_api_key: acc.webhook_api_key || '' });
+    setEditForm({
+      name: acc.name,
+      api_token: '',
+      webhook_api_key: acc.webhook_api_key || '',
+      sync_interval_minutes: acc.sync_interval_minutes != null ? String(acc.sync_interval_minutes) : '',
+    });
   };
 
   return (
@@ -118,6 +127,20 @@ export default function AccountsPage({ accounts, onChanged }: Props) {
                   placeholder="Linode Personal Access Token"
                 />
               </div>
+              <div>
+                <label className="block text-xs font-medium text-lnmuted mb-1">
+                  Sync Interval (minutes)
+                  <span className="ml-1 text-lnfaint font-normal">— leave blank to use global default</span>
+                </label>
+                <input
+                  type="number"
+                  min={5}
+                  value={form.sync_interval_minutes}
+                  onChange={e => setForm(f => ({ ...f, sync_interval_minutes: e.target.value }))}
+                  className="w-full bg-lncard border border-lnborder rounded px-3 py-2 text-sm text-lntext placeholder-lnfaint focus:outline-none focus:border-lncyan2"
+                  placeholder="e.g. 15"
+                />
+              </div>
               <div className="flex gap-3">
                 <button
                   onClick={handleAdd}
@@ -160,6 +183,20 @@ export default function AccountsPage({ accounts, onChanged }: Props) {
                     className="w-full bg-lncard border border-lnborder rounded px-3 py-2 text-sm text-lntext font-mono focus:outline-none focus:border-lncyan2"
                     placeholder="Leave blank to keep existing token"
                   />
+                  <div>
+                    <label className="block text-xs font-medium text-lnmuted mb-1">
+                      Sync Interval (minutes)
+                      <span className="ml-1 text-lnfaint font-normal">— blank uses global default</span>
+                    </label>
+                    <input
+                      type="number"
+                      min={5}
+                      value={editForm.sync_interval_minutes}
+                      onChange={e => setEditForm(f => ({ ...f, sync_interval_minutes: e.target.value }))}
+                      className="w-full bg-lncard border border-lnborder rounded px-3 py-2 text-sm text-lntext placeholder-lnfaint focus:outline-none focus:border-lncyan2"
+                      placeholder="e.g. 15"
+                    />
+                  </div>
                   <div className="flex gap-2">
                     <button onClick={() => handleEdit(acc.id)} disabled={loading}
                       className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-lncyan2 hover:bg-lncyan disabled:opacity-50 text-lntext rounded transition">
@@ -188,6 +225,10 @@ export default function AccountsPage({ accounts, onChanged }: Props) {
                           Evaluated {new Date(acc.last_evaluated_at).toLocaleString()}
                         </p>
                       )}
+                      <p className="text-xs text-lnfaint flex items-center gap-1">
+                        <Key className="w-3 h-3" />
+                        Sync interval: {acc.sync_interval_minutes != null ? `${acc.sync_interval_minutes} min (custom)` : 'global default'}
+                      </p>
                     </div>
                     <div className="mt-2">
                       <span className="text-xs text-lnfaint font-mono">{acc.id}</span>
