@@ -65,7 +65,7 @@ initial_admin_password = "ChangeMe!Admin#Password"
 cors_origins = ""
 
 jwt_expire_minutes  = 1440   # 24 hours
-trusted_proxy_count = 0      # set to 1 if behind a load balancer / reverse proxy
+trusted_proxy_count = 1      # set to 1 if behind a load balancer / reverse proxy
 
 # ─── SSL / TLS (Let's Encrypt) ────────────────────────────────────────────────
 # Set ssl_email to enable automatic HTTPS via Let's Encrypt during deployment.
