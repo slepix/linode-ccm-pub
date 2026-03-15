@@ -119,7 +119,7 @@ cp "$APP_DIR/nginx.conf" /etc/nginx/sites-available/default
 if command -v npm &> /dev/null; then
     echo "Building frontend..."
     cd "$APP_DIR"
-    npm ci --omit=dev
+    npm ci
     npm run build
     cp -r dist/* /var/www/html/
     cd -
