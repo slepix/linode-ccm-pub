@@ -154,6 +154,14 @@ for i in $(seq 1 60); do
   sleep 5
 done
 
+# ─── Install sync cron job (runs every minute, self-throttles via schedule) ───
+SYNC_SCRIPT="$APP_DIR/backend/sync_cron.sh"
+chmod +x "$SYNC_SCRIPT"
+SYNC_LOG="/var/log/ccm_sync.log"
+echo "* * * * * root $SYNC_SCRIPT >> $SYNC_LOG 2>&1" > /etc/cron.d/ccm-sync
+chmod 644 /etc/cron.d/ccm-sync
+echo "Sync cron job installed at /etc/cron.d/ccm-sync (every minute)"
+
 # ─── Create initial admin account (if credentials provided) ───────────────────
 %{ if initial_admin_email != "" && initial_admin_password != "" }
 echo "Creating initial admin account: ${initial_admin_email}"
