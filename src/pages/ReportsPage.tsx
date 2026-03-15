@@ -605,6 +605,7 @@ function ReportViewer({ report, onBack, onDelete }: ReportViewerProps) {
                               <th className="px-4 py-2 text-left text-lnfaint font-medium">Region</th>
                               <th className="px-4 py-2 text-left text-lnfaint font-medium">Status</th>
                               <th className="px-4 py-2 text-left text-lnfaint font-medium">Detail</th>
+                              <th className="px-4 py-2 text-left text-lnfaint font-medium">Note</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -620,6 +621,7 @@ function ReportViewer({ report, onBack, onDelete }: ReportViewerProps) {
                                   )}
                                 </td>
                                 <td className="px-4 py-2 text-lnmuted max-w-xs truncate">{r.detail ?? '—'}</td>
+                                <td className="px-4 py-2 text-lnfaint max-w-xs truncate">{r.acknowledged_note ?? '—'}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -653,6 +655,7 @@ function ReportViewer({ report, onBack, onDelete }: ReportViewerProps) {
                     <th className="px-3 py-2.5 text-left text-lnfaint font-medium">Region</th>
                     <th className="px-3 py-2.5 text-left text-lnfaint font-medium">Acknowledged</th>
                     <th className="px-3 py-2.5 text-left text-lnfaint font-medium">Detail</th>
+                    <th className="px-3 py-2.5 text-left text-lnfaint font-medium">Note</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -669,6 +672,7 @@ function ReportViewer({ report, onBack, onDelete }: ReportViewerProps) {
                         }
                       </td>
                       <td className="px-3 py-2.5 text-lnmuted max-w-[200px] truncate">{r.detail ?? '—'}</td>
+                      <td className="px-3 py-2.5 text-lnfaint max-w-[200px] truncate">{r.acknowledged_note ?? '—'}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -90,6 +90,7 @@ function renderResultRow(r: ReportResult, i: number): string {
       <td style="padding:7px 10px;font-size:12px;border-bottom:1px solid #e5e7eb">${badge(r.status.replace('_', ' ').toUpperCase(), statusColor(r.status), statusBg(r.status), statusColor(r.status) + '33')}</td>
       <td style="padding:7px 10px;font-size:11px;color:#6b7280;border-bottom:1px solid #e5e7eb">${r.acknowledged ? '<span style="color:#16a34a;font-weight:600">Yes</span>' : 'No'}</td>
       <td style="padding:7px 10px;font-size:11px;color:#6b7280;border-bottom:1px solid #e5e7eb;max-width:200px;word-break:break-word">${esc(r.detail ?? '—')}</td>
+      <td style="padding:7px 10px;font-size:11px;color:#6b7280;border-bottom:1px solid #e5e7eb;max-width:200px;word-break:break-word">${esc(r.acknowledged_note ?? '—')}</td>
     </tr>`;
 }
 
@@ -124,6 +125,7 @@ function renderRuleSection(name: string, rs: ReportRuleSummary, results: ReportR
               <th style="padding:6px 10px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#6b7280">Status</th>
               <th style="padding:6px 10px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#6b7280">Ack</th>
               <th style="padding:6px 10px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#6b7280">Detail</th>
+              <th style="padding:6px 10px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#6b7280">Note</th>
             </tr>
           </thead>
           <tbody>
@@ -135,6 +137,7 @@ function renderRuleSection(name: string, rs: ReportRuleSummary, results: ReportR
                 <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6">${badge(r.status.replace('_', ' ').toUpperCase(), statusColor(r.status), statusBg(r.status), statusColor(r.status) + '33')}</td>
                 <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6">${r.acknowledged ? '<span style="color:#16a34a;font-weight:600">Yes</span>' : '<span style="color:#9ca3af">No</span>'}</td>
                 <td style="padding:6px 10px;color:#6b7280;border-bottom:1px solid #f3f4f6;word-break:break-word">${esc(r.detail ?? '—')}</td>
+                <td style="padding:6px 10px;color:#6b7280;border-bottom:1px solid #f3f4f6;word-break:break-word">${esc(r.acknowledged_note ?? '—')}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -303,6 +306,7 @@ ${nonCompliant.length > 0 ? `
         <th>Status</th>
         <th>Ack</th>
         <th>Detail</th>
+        <th>Note</th>
       </tr>
     </thead>
     <tbody>
@@ -326,6 +330,7 @@ ${nonCompliant.length > 0 ? `
         <th>Status</th>
         <th>Ack</th>
         <th>Detail</th>
+        <th>Note</th>
       </tr>
     </thead>
     <tbody>
