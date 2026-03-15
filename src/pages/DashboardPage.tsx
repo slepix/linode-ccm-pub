@@ -288,8 +288,6 @@ export default function DashboardPage({ account, onAccountUpdated }: Props) {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
               <CoverageMetrics
                 rules={rules}
-                activeProfiles={activeProfiles}
-                allProfiles={allProfiles}
                 resources={resources}
               />
               <ReportInsights reports={reports} />

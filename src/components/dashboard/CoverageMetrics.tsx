@@ -1,12 +1,10 @@
 import React from 'react';
-import { Shield, Server, Layers } from 'lucide-react';
-import { ComplianceRule, ComplianceProfile } from '../../api/compliance';
+import { Shield } from 'lucide-react';
+import { ComplianceRule } from '../../api/compliance';
 import { Resource } from '../../api/resources';
 
 interface Props {
   rules: ComplianceRule[];
-  activeProfiles: ComplianceProfile[];
-  allProfiles: ComplianceProfile[];
   resources: Resource[];
 }
 
@@ -22,7 +20,7 @@ function CoverageBar({ value, max, color }: { value: number; max: number; color:
   );
 }
 
-export default function CoverageMetrics({ rules, activeProfiles, allProfiles, resources }: Props) {
+export default function CoverageMetrics({ rules, resources }: Props) {
   const enabledRules = rules.filter(r => r.is_active);
   const totalRules = rules.length;
 
@@ -30,14 +28,6 @@ export default function CoverageMetrics({ rules, activeProfiles, allProfiles, re
     acc[r.resource_type] = (acc[r.resource_type] || 0) + 1;
     return acc;
   }, {});
-
-  const coveredTypes = new Set(enabledRules.flatMap(r => r.resource_types));
-  const totalTypes = Object.keys(resourcesByType).length;
-  const coveredTypeCount = Object.keys(resourcesByType).filter(t => coveredTypes.has(t)).length;
-
-  const profileCoverage = allProfiles.length > 0
-    ? (activeProfiles.length / allProfiles.length) * 100
-    : 0;
 
   const rulesByType = resources.reduce<Record<string, { covered: number; total: number }>>((acc, r) => {
     if (!acc[r.resource_type]) {
@@ -74,53 +64,6 @@ export default function CoverageMetrics({ rules, activeProfiles, allProfiles, re
           </div>
         </div>
 
-        <div className="p-3 rounded bg-lnbg border border-lnborder">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded bg-lngreen/10 flex items-center justify-center shrink-0">
-              <Server className="w-4 h-4 text-lngreen" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-lnmuted font-medium">Resource Types Covered</span>
-                <span className="text-sm font-bold text-lntext tabular-nums">
-                  {coveredTypeCount}
-                  <span className="text-xs text-lnfaint font-normal"> / {totalTypes}</span>
-                </span>
-              </div>
-              <CoverageBar value={coveredTypeCount} max={totalTypes} color="#1cb35b" />
-              <div className="text-xs text-lnfaint mt-1.5">
-                {resources.length} total resources discovered
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="p-3 rounded bg-lnbg border border-lnborder">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded bg-lnamber/10 flex items-center justify-center shrink-0">
-              <Layers className="w-4 h-4 text-lnamber" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-lnmuted font-medium">Profiles Applied</span>
-                <span className="text-sm font-bold text-lntext tabular-nums">
-                  {activeProfiles.length}
-                  <span className="text-xs text-lnfaint font-normal"> / {allProfiles.length}</span>
-                </span>
-              </div>
-              <CoverageBar value={activeProfiles.length} max={allProfiles.length} color="#e5a225" />
-              {activeProfiles.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {activeProfiles.map(p => (
-                    <span key={p.id} className="text-xs px-1.5 py-0.5 rounded bg-lnamber/10 text-lnamber">
-                      {p.name}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
       </div>
 
       {Object.keys(rulesByType).length > 0 && (
