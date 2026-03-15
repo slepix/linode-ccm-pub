@@ -2,10 +2,10 @@ import React from 'react';
 import {
   Shield, LayoutDashboard, Server, ClipboardList,
   Users, ChevronDown, LogOut, Settings, Activity, ShieldCheck,
-  Database, RefreshCw, CheckCircle, AlertCircle, FileText,
+  Database, RefreshCw, CheckCircle, AlertCircle, FileText, Clock,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { runMigrations } from '../api/admin';
+import { runMigrations, getSyncSchedule, updateSyncSchedule } from '../api/admin';
 
 interface SidebarProps {
   currentView: string;
@@ -13,12 +13,17 @@ interface SidebarProps {
 }
 
 type MigrationStatus = 'idle' | 'running' | 'success' | 'error';
+type SyncSaveStatus = 'idle' | 'saving' | 'success' | 'error';
 
 export default function Sidebar({ currentView, onNavigate }: SidebarProps) {
   const { user, logout } = useAuth();
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [migrationStatus, setMigrationStatus] = React.useState<MigrationStatus>('idle');
   const [migrationMessage, setMigrationMessage] = React.useState('');
+  const [syncInterval, setSyncInterval] = React.useState<number | ''>('');
+  const [syncIntervalInput, setSyncIntervalInput] = React.useState('');
+  const [syncSaveStatus, setSyncSaveStatus] = React.useState<SyncSaveStatus>('idle');
+  const [syncSaveMessage, setSyncSaveMessage] = React.useState('');
 
   const navGroups = [
     {
@@ -52,6 +57,40 @@ export default function Sidebar({ currentView, onNavigate }: SidebarProps) {
       { id: 'users', label: 'Users', icon: Users },
     ],
   };
+
+  React.useEffect(() => {
+    if (user?.role === 'admin' && settingsOpen) {
+      getSyncSchedule()
+        .then(data => {
+          setSyncInterval(data.interval_minutes);
+          setSyncIntervalInput(String(data.interval_minutes));
+        })
+        .catch(() => {});
+    }
+  }, [settingsOpen, user?.role]);
+
+  async function handleSaveSyncSchedule() {
+    const val = parseInt(syncIntervalInput, 10);
+    if (isNaN(val) || val < 5) {
+      setSyncSaveStatus('error');
+      setSyncSaveMessage('Minimum interval is 5 minutes');
+      setTimeout(() => { setSyncSaveStatus('idle'); setSyncSaveMessage(''); }, 4000);
+      return;
+    }
+    setSyncSaveStatus('saving');
+    setSyncSaveMessage('');
+    try {
+      await updateSyncSchedule(val);
+      setSyncInterval(val);
+      setSyncSaveStatus('success');
+      setSyncSaveMessage('Schedule saved');
+    } catch (err: unknown) {
+      setSyncSaveStatus('error');
+      setSyncSaveMessage(err instanceof Error ? err.message : 'Failed to save');
+    } finally {
+      setTimeout(() => { setSyncSaveStatus('idle'); setSyncSaveMessage(''); }, 4000);
+    }
+  }
 
   async function handleRunMigrations() {
     setMigrationStatus('running');
@@ -172,40 +211,93 @@ export default function Sidebar({ currentView, onNavigate }: SidebarProps) {
             </button>
 
             {settingsOpen && (
-              <div className="mt-1 border border-lnborder rounded overflow-hidden">
-                <div className="px-3 py-2 bg-lnbg flex items-center gap-2 border-b border-lnborder">
-                  <Database className="w-3 h-3 text-lnfaint" />
-                  <span className="text-[10px] font-bold text-lnfaint uppercase tracking-widest">Database</span>
-                </div>
-                <div className="px-3 py-3 bg-lndark">
-                  <p className="text-xs text-lnfaint mb-3 leading-relaxed">
-                    Apply pending schema migrations.
-                  </p>
-                  <button
-                    onClick={handleRunMigrations}
-                    disabled={migrationStatus === 'running'}
-                    className={`w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded text-xs font-medium transition ${
-                      migrationStatus === 'running'
-                        ? 'bg-lnborder text-lnfaint cursor-not-allowed'
-                        : migrationStatus === 'success'
-                        ? 'bg-lngreen/10 text-lngreen border border-lngreen/30'
-                        : migrationStatus === 'error'
-                        ? 'bg-lnred/10 text-lnred border border-lnred/30'
-                        : 'bg-lncyan2 hover:bg-lncyan text-white'
-                    }`}
-                  >
-                    {migrationStatus === 'running' && <RefreshCw className="w-3 h-3 animate-spin" />}
-                    {migrationStatus === 'success' && <CheckCircle className="w-3 h-3" />}
-                    {migrationStatus === 'error' && <AlertCircle className="w-3 h-3" />}
-                    {migrationStatus === 'running' ? 'Running…' : 'Update DB'}
-                  </button>
-                  {migrationMessage && (
-                    <p className={`mt-2 text-xs leading-relaxed ${
-                      migrationStatus === 'success' ? 'text-lngreen' : 'text-lnred'
-                    }`}>
-                      {migrationMessage}
+              <div className="mt-1 space-y-1">
+                <div className="border border-lnborder rounded overflow-hidden">
+                  <div className="px-3 py-2 bg-lnbg flex items-center gap-2 border-b border-lnborder">
+                    <Clock className="w-3 h-3 text-lnfaint" />
+                    <span className="text-[10px] font-bold text-lnfaint uppercase tracking-widest">Auto-Sync</span>
+                  </div>
+                  <div className="px-3 py-3 bg-lndark">
+                    <p className="text-xs text-lnfaint mb-3 leading-relaxed">
+                      How often to sync account data (min 5 min).
                     </p>
-                  )}
+                    <div className="flex items-center gap-2 mb-2">
+                      <input
+                        type="number"
+                        min={5}
+                        value={syncIntervalInput}
+                        onChange={e => setSyncIntervalInput(e.target.value)}
+                        className="w-16 bg-lnbg border border-lnborder rounded px-2 py-1 text-xs text-lntext focus:outline-none focus:border-lncyan2 text-center"
+                        placeholder="60"
+                      />
+                      <span className="text-xs text-lnfaint">minutes</span>
+                    </div>
+                    {syncInterval !== '' && (
+                      <p className="text-[10px] text-lnfaint mb-2">Current: {syncInterval} min</p>
+                    )}
+                    <button
+                      onClick={handleSaveSyncSchedule}
+                      disabled={syncSaveStatus === 'saving'}
+                      className={`w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded text-xs font-medium transition ${
+                        syncSaveStatus === 'saving'
+                          ? 'bg-lnborder text-lnfaint cursor-not-allowed'
+                          : syncSaveStatus === 'success'
+                          ? 'bg-lngreen/10 text-lngreen border border-lngreen/30'
+                          : syncSaveStatus === 'error'
+                          ? 'bg-lnred/10 text-lnred border border-lnred/30'
+                          : 'bg-lncyan2 hover:bg-lncyan text-white'
+                      }`}
+                    >
+                      {syncSaveStatus === 'saving' && <RefreshCw className="w-3 h-3 animate-spin" />}
+                      {syncSaveStatus === 'success' && <CheckCircle className="w-3 h-3" />}
+                      {syncSaveStatus === 'error' && <AlertCircle className="w-3 h-3" />}
+                      {syncSaveStatus === 'saving' ? 'Saving…' : 'Save'}
+                    </button>
+                    {syncSaveMessage && (
+                      <p className={`mt-2 text-xs leading-relaxed ${
+                        syncSaveStatus === 'success' ? 'text-lngreen' : 'text-lnred'
+                      }`}>
+                        {syncSaveMessage}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="border border-lnborder rounded overflow-hidden">
+                  <div className="px-3 py-2 bg-lnbg flex items-center gap-2 border-b border-lnborder">
+                    <Database className="w-3 h-3 text-lnfaint" />
+                    <span className="text-[10px] font-bold text-lnfaint uppercase tracking-widest">Database</span>
+                  </div>
+                  <div className="px-3 py-3 bg-lndark">
+                    <p className="text-xs text-lnfaint mb-3 leading-relaxed">
+                      Apply pending schema migrations.
+                    </p>
+                    <button
+                      onClick={handleRunMigrations}
+                      disabled={migrationStatus === 'running'}
+                      className={`w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded text-xs font-medium transition ${
+                        migrationStatus === 'running'
+                          ? 'bg-lnborder text-lnfaint cursor-not-allowed'
+                          : migrationStatus === 'success'
+                          ? 'bg-lngreen/10 text-lngreen border border-lngreen/30'
+                          : migrationStatus === 'error'
+                          ? 'bg-lnred/10 text-lnred border border-lnred/30'
+                          : 'bg-lncyan2 hover:bg-lncyan text-white'
+                      }`}
+                    >
+                      {migrationStatus === 'running' && <RefreshCw className="w-3 h-3 animate-spin" />}
+                      {migrationStatus === 'success' && <CheckCircle className="w-3 h-3" />}
+                      {migrationStatus === 'error' && <AlertCircle className="w-3 h-3" />}
+                      {migrationStatus === 'running' ? 'Running…' : 'Update DB'}
+                    </button>
+                    {migrationMessage && (
+                      <p className={`mt-2 text-xs leading-relaxed ${
+                        migrationStatus === 'success' ? 'text-lngreen' : 'text-lnred'
+                      }`}>
+                        {migrationMessage}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             )}

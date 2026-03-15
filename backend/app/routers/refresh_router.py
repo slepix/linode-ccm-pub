@@ -59,6 +59,58 @@ def refresh_get(
     return _do_refresh(account_id, skip_sync, skip_eval, db)
 
 
+@router.get("/api/refresh/scheduled")
+def refresh_scheduled(
+    request: Request,
+    db=Depends(get_db),
+):
+    """
+    Lightweight endpoint designed to be called externally (e.g. every minute by a cron).
+    Checks the configured sync interval against the last completed sync time and only
+    triggers a full sync when the interval has elapsed. Protected by REFRESH_API_SECRET.
+    """
+    if not _check_api_auth(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    cur = db.cursor()
+
+    cur.execute("SELECT value FROM app_settings WHERE key = 'sync_interval_minutes'")
+    row = cur.fetchone()
+    interval_minutes = int(row["value"]) if row else 60
+
+    cur.execute(
+        """
+        SELECT MAX(last_synced_at) AS last_sync
+        FROM linode_accounts
+        WHERE last_synced_at IS NOT NULL
+        """
+    )
+    result = cur.fetchone()
+    last_sync = result["last_sync"] if result else None
+
+    now = datetime.now(timezone.utc)
+
+    if last_sync is not None:
+        if last_sync.tzinfo is None:
+            last_sync = last_sync.replace(tzinfo=timezone.utc)
+        elapsed_seconds = (now - last_sync).total_seconds()
+        elapsed_minutes = elapsed_seconds / 60
+        if elapsed_minutes < interval_minutes:
+            remaining = interval_minutes - elapsed_minutes
+            return {
+                "skipped": True,
+                "reason": "Data is fresh",
+                "last_sync": last_sync.isoformat(),
+                "interval_minutes": interval_minutes,
+                "next_sync_in_minutes": round(remaining, 1),
+            }
+
+    result = _do_refresh(None, False, False, db)
+    result["skipped"] = False
+    result["interval_minutes"] = interval_minutes
+    return result
+
+
 @router.get("/api/refresh/stream")
 def refresh_stream(
     request: Request,
