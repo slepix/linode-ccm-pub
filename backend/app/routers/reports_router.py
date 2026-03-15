@@ -244,11 +244,12 @@ def _build_snapshot(account_id: str, period_start: datetime, period_end: datetim
     )
     active_profiles = [dict(r) for r in cur.fetchall()]
 
-    total = len([r for r in results if r["status"] != "not_applicable"])
+    acknowledged = len([r for r in results if r["acknowledged"] and r["status"] == "non_compliant"])
     compliant = len([r for r in results if r["status"] == "compliant"])
-    non_compliant = len([r for r in results if r["status"] == "non_compliant"])
-    acknowledged = len([r for r in results if r["acknowledged"]])
-    compliance_score = round((compliant / total) * 100, 1) if total > 0 else None
+    non_compliant = len([r for r in results if r["status"] == "non_compliant" and not r["acknowledged"]])
+    total = len([r for r in results if r["status"] != "not_applicable" and not (r["status"] == "non_compliant" and r["acknowledged"])])
+    scoreable = compliant + non_compliant
+    compliance_score = round((compliant / scoreable) * 100, 1) if scoreable > 0 else None
 
     rule_summary: dict = {}
     for r in results:

@@ -863,10 +863,10 @@ export default function CompliancePage({ account }: Props) {
 
         {(score || results.length > 0) && (() => {
           const resolvedCount = results.filter(r => r.status === 'non_compliant' && r.acknowledged).length;
-          const compliantCount = results.filter(r => r.status === 'compliant').length + resolvedCount;
+          const compliantCount = results.filter(r => r.status === 'compliant').length;
           const openNonCompliantCount = results.filter(r => r.status === 'non_compliant' && !r.acknowledged).length;
-          const total = results.filter(r => r.status !== 'not_applicable').length;
-          const liveScore = total > 0 ? Math.round((compliantCount / total) * 100) : (score?.compliance_score ?? null);
+          const scoreable = compliantCount + openNonCompliantCount;
+          const liveScore = scoreable > 0 ? Math.round((compliantCount / scoreable) * 100) : (score?.compliance_score ?? null);
           return (
             <div className="grid grid-cols-4 gap-4 mb-6">
               {[
