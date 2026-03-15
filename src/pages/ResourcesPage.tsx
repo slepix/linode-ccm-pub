@@ -7,6 +7,7 @@ import ResourceSpecsView from '../components/ResourceSpecsView';
 import ResourceTimelineModal from '../components/ResourceTimelineModal';
 import { exportResourcePdf } from '../utils/exportResourcePdf';
 import { exportResourceCsv, exportResourceXls, ComplianceResultWithNotes } from '../utils/exportResourceCsv';
+import { exportResourceOcsf } from '../utils/exportResourceOcsf';
 
 const TYPE_META: Record<string, { icon: React.ElementType; color: string; label: string }> = {
   linode:         { icon: Server,   color: 'bg-ln-icon-blue text-lnblue',       label: 'Linodes' },
@@ -61,7 +62,7 @@ function ExportDropdown({ resource, accountId }: { resource: Resource; accountId
     );
   };
 
-  const handleFormat = async (e: React.MouseEvent, format: 'pdf' | 'csv' | 'xls') => {
+  const handleFormat = async (e: React.MouseEvent, format: 'pdf' | 'csv' | 'xls' | 'ocsf') => {
     e.stopPropagation();
     setOpen(false);
     setLoading(true);
@@ -77,17 +78,19 @@ function ExportDropdown({ resource, accountId }: { resource: Resource; accountId
       } else {
         const results = await fetchResults();
         if (format === 'csv') exportResourceCsv(resource, results);
-        else exportResourceXls(resource, results);
+        else if (format === 'xls') exportResourceXls(resource, results);
+        else exportResourceOcsf(resource, results);
       }
     } finally {
       setLoading(false);
     }
   };
 
-  const formats: { label: string; ext: string; format: 'pdf' | 'csv' | 'xls' }[] = [
+  const formats: { label: string; ext: string; format: 'pdf' | 'csv' | 'xls' | 'ocsf' }[] = [
     { label: 'PDF', ext: 'pdf', format: 'pdf' },
     { label: 'CSV', ext: 'csv', format: 'csv' },
     { label: 'XLS', ext: 'xls', format: 'xls' },
+    { label: 'OCSF', ext: 'json', format: 'ocsf' },
   ];
 
   return (

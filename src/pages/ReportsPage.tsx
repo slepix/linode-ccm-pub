@@ -9,6 +9,7 @@ import { LinodeAccount } from '../api/accounts';
 import { reportsApi, Report, ReportSnapshot, ReportRuleSummary } from '../api/reports';
 import { exportReportPdf } from '../utils/exportReportPdf';
 import { exportReportCsv, exportReportXls } from '../utils/exportReportCsv';
+import { exportReportOcsf } from '../utils/exportReportOcsf';
 import { useSync } from '../context/SyncContext';
 
 interface Props {
@@ -360,6 +361,7 @@ function ExportDropdown({ report }: { report: Report }) {
     { label: 'PDF', ext: 'pdf', action: () => exportReportPdf(report) },
     { label: 'CSV', ext: 'csv', action: () => exportReportCsv(report) },
     { label: 'XLS', ext: 'xls', action: () => exportReportXls(report) },
+    { label: 'OCSF', ext: 'json', action: () => exportReportOcsf(report) },
   ];
 
   return (
