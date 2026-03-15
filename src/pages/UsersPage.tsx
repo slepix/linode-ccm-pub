@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Trash2, Check, X, Loader2, Shield, User, KeyRound, ChevronDown, ChevronRight, Link2, Unlink, Lock } from 'lucide-react';
+import { Plus, Trash2, Check, X, Loader2, Shield, User, KeyRound, ChevronDown, ChevronRight, Link2, Unlink, Lock, ShieldOff } from 'lucide-react';
 import { api } from '../api/client';
 import { accountsApi, LinodeAccount } from '../api/accounts';
+import { authApi } from '../api/auth';
 import ChangePasswordModal from '../components/ChangePasswordModal';
 
 interface OrgUser {
@@ -12,6 +13,7 @@ interface OrgUser {
   is_active: boolean;
   can_view_costs: boolean;
   can_view_compliance: boolean;
+  totp_enabled: boolean;
   created_at: string;
 }
 
@@ -197,6 +199,18 @@ export default function UsersPage() {
   const [error, setError] = useState('');
   const [accessUser, setAccessUser] = useState<OrgUser | null>(null);
   const [resetPasswordUser, setResetPasswordUser] = useState<OrgUser | null>(null);
+  const [disabling2faUserId, setDisabling2faUserId] = useState<string | null>(null);
+
+  const handleDisable2fa = async (u: OrgUser) => {
+    if (!confirm(`Disable 2FA for "${u.full_name || u.email}"? They will no longer need an authenticator code to log in.`)) return;
+    setDisabling2faUserId(u.id);
+    try {
+      await authApi.adminDisable2fa(u.id);
+      load();
+    } finally {
+      setDisabling2faUserId(null);
+    }
+  };
 
   const load = () => {
     setLoading(true);
@@ -334,6 +348,17 @@ export default function UsersPage() {
                   >
                     <Lock className="w-4 h-4" />
                   </button>
+                  {u.totp_enabled && (
+                    <button
+                      onClick={() => handleDisable2fa(u)}
+                      disabled={disabling2faUserId === u.id}
+                      className="flex items-center gap-1 px-2 py-1.5 text-xs text-lngreen hover:text-lnamber hover:bg-lnamber/10 rounded transition disabled:opacity-40"
+                      title="2FA enabled — click to disable"
+                    >
+                      {disabling2faUserId === u.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldOff className="w-3.5 h-3.5" />}
+                      <span>2FA</span>
+                    </button>
+                  )}
                   <button
                     onClick={() => handleToggleActive(u)}
                     className={`p-1.5 rounded transition ${u.is_active ? 'text-lnmuted hover:text-lnamber hover:bg-ln-icon-amber' : 'text-lngreen hover:bg-lngreen/10'}`}

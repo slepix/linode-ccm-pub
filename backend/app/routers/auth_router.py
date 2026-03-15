@@ -1,6 +1,9 @@
+import io
+import base64
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 from app.database import get_db
@@ -10,6 +13,9 @@ from app.auth import (
 )
 from app.config import settings
 from jwt.exceptions import InvalidTokenError
+import pyotp
+import qrcode
+import qrcode.image.svg
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -19,6 +25,7 @@ bearer_scheme = HTTPBearer(auto_error=False)
 class LoginRequest(BaseModel):
     email: str
     password: str
+    totp_code: Optional[str] = None
 
 
 class RegisterRequest(BaseModel):
@@ -68,7 +75,9 @@ def register(body: RegisterRequest, db=Depends(get_db)):
 def login(body: LoginRequest, db=Depends(get_db)):
     cur = db.cursor()
     cur.execute(
-        "SELECT id, email, full_name, role, is_active, password_hash, can_view_costs, can_view_compliance FROM org_users WHERE email = %s AND is_active = TRUE",
+        """SELECT id, email, full_name, role, is_active, password_hash,
+                  can_view_costs, can_view_compliance, totp_enabled, totp_secret
+           FROM org_users WHERE email = %s AND is_active = TRUE""",
         (body.email.lower(),),
     )
     user = cur.fetchone()
@@ -76,6 +85,17 @@ def login(body: LoginRequest, db=Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     user = dict(user)
+
+    if user.get("totp_enabled") and user.get("totp_secret"):
+        if not body.totp_code:
+            return JSONResponse(
+                status_code=202,
+                content={"requires_totp": True},
+            )
+        totp = pyotp.TOTP(user["totp_secret"])
+        if not totp.verify(body.totp_code, valid_window=1):
+            raise HTTPException(status_code=401, detail="Invalid authenticator code")
+
     token = create_token(str(user["id"]), user["email"], user["role"])
     return {
         "token": token,
@@ -146,3 +166,96 @@ def change_password(
         (new_hash, str(current_user["id"])),
     )
     return {"ok": True}
+
+
+@router.post("/2fa/setup")
+def setup_2fa(current_user=Depends(get_current_user), db=Depends(get_db)):
+    secret = pyotp.random_base32()
+    cur = db.cursor()
+    cur.execute(
+        "UPDATE org_users SET totp_secret = %s, totp_enabled = FALSE WHERE id = %s",
+        (secret, str(current_user["id"])),
+    )
+    db.commit()
+
+    app_name = "Akamai CCM"
+    email = current_user["email"]
+    uri = pyotp.totp.TOTP(secret).provisioning_uri(name=email, issuer_name=app_name)
+
+    img = qrcode.make(uri)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    qr_b64 = base64.b64encode(buf.getvalue()).decode()
+
+    return {
+        "secret": secret,
+        "qr_code": f"data:image/png;base64,{qr_b64}",
+        "uri": uri,
+    }
+
+
+class TotpVerifyRequest(BaseModel):
+    code: str
+
+
+@router.post("/2fa/enable")
+def enable_2fa(body: TotpVerifyRequest, current_user=Depends(get_current_user), db=Depends(get_db)):
+    cur = db.cursor()
+    cur.execute("SELECT totp_secret FROM org_users WHERE id = %s", (str(current_user["id"]),))
+    row = cur.fetchone()
+    if not row or not row["totp_secret"]:
+        raise HTTPException(status_code=400, detail="2FA setup not started. Call /2fa/setup first.")
+
+    totp = pyotp.TOTP(row["totp_secret"])
+    if not totp.verify(body.code, valid_window=1):
+        raise HTTPException(status_code=400, detail="Invalid authenticator code. Please try again.")
+
+    cur.execute(
+        "UPDATE org_users SET totp_enabled = TRUE WHERE id = %s",
+        (str(current_user["id"]),),
+    )
+    db.commit()
+    return {"enabled": True}
+
+
+@router.post("/2fa/disable")
+def disable_2fa(body: TotpVerifyRequest, current_user=Depends(get_current_user), db=Depends(get_db)):
+    cur = db.cursor()
+    cur.execute("SELECT totp_secret, totp_enabled FROM org_users WHERE id = %s", (str(current_user["id"]),))
+    row = cur.fetchone()
+    if not row or not row["totp_enabled"]:
+        raise HTTPException(status_code=400, detail="2FA is not enabled.")
+
+    totp = pyotp.TOTP(row["totp_secret"])
+    if not totp.verify(body.code, valid_window=1):
+        raise HTTPException(status_code=400, detail="Invalid authenticator code.")
+
+    cur.execute(
+        "UPDATE org_users SET totp_secret = NULL, totp_enabled = FALSE WHERE id = %s",
+        (str(current_user["id"]),),
+    )
+    db.commit()
+    return {"disabled": True}
+
+
+@router.get("/2fa/status")
+def get_2fa_status(current_user=Depends(get_current_user), db=Depends(get_db)):
+    cur = db.cursor()
+    cur.execute("SELECT totp_enabled FROM org_users WHERE id = %s", (str(current_user["id"]),))
+    row = cur.fetchone()
+    return {"enabled": bool(row and row["totp_enabled"])}
+
+
+@router.post("/2fa/admin-disable/{user_id}")
+def admin_disable_2fa(user_id: str, current_user=Depends(get_current_user), db=Depends(get_db)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    cur = db.cursor()
+    cur.execute(
+        "UPDATE org_users SET totp_secret = NULL, totp_enabled = FALSE WHERE id = %s RETURNING id",
+        (user_id,),
+    )
+    if not cur.fetchone():
+        raise HTTPException(status_code=404, detail="User not found")
+    db.commit()
+    return {"disabled": True}

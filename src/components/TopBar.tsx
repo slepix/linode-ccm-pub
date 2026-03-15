@@ -1,10 +1,11 @@
 import React from 'react';
-import { ChevronsUpDown, Sun, Moon, Lock, LogOut, User } from 'lucide-react';
+import { ChevronsUpDown, Sun, Moon, Lock, LogOut, ShieldCheck } from 'lucide-react';
 import { LinodeAccount } from '../api/accounts';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import GlobalSearch from './GlobalSearch';
 import ChangePasswordModal from './ChangePasswordModal';
+import TwoFactorSetupModal from './TwoFactorSetupModal';
 
 interface TopBarProps {
   accounts: LinodeAccount[];
@@ -16,6 +17,7 @@ export default function TopBar({ accounts, selectedAccount, onSelectAccount }: T
   const [accountOpen, setAccountOpen] = React.useState(false);
   const [userOpen, setUserOpen] = React.useState(false);
   const [showChangePassword, setShowChangePassword] = React.useState(false);
+  const [show2fa, setShow2fa] = React.useState(false);
   const accountRef = React.useRef<HTMLDivElement>(null);
   const userRef = React.useRef<HTMLDivElement>(null);
   const { theme, toggleTheme } = useTheme();
@@ -129,6 +131,14 @@ export default function TopBar({ accounts, selectedAccount, onSelectAccount }: T
                     Change Password
                   </button>
                   <button
+                    onClick={() => { setUserOpen(false); setShow2fa(true); }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-lnmuted hover:text-lntext hover:bg-lnborder transition-colors text-left"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    Two-Factor Auth
+                  </button>
+                  <div className="h-px bg-lnborder mx-3 my-1" />
+                  <button
                     onClick={() => { setUserOpen(false); logout(); }}
                     className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-lnmuted hover:text-lnred hover:bg-lnred/10 transition-colors text-left"
                   >
@@ -144,6 +154,10 @@ export default function TopBar({ accounts, selectedAccount, onSelectAccount }: T
 
       {showChangePassword && (
         <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
+      )}
+
+      {show2fa && (
+        <TwoFactorSetupModal onClose={() => setShow2fa(false)} />
       )}
     </>
   );

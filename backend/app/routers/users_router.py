@@ -38,7 +38,7 @@ def list_users(current_user=Depends(require_admin), db=Depends(get_db)):
     cur = db.cursor()
     cur.execute("""
         SELECT id, email, full_name, role, is_active, can_view_costs, can_view_compliance,
-               created_at, updated_at
+               COALESCE(totp_enabled, FALSE) as totp_enabled, created_at, updated_at
         FROM org_users ORDER BY full_name
     """)
     return [dict(r) for r in cur.fetchall()]

@@ -5,7 +5,7 @@ import { setToken, getToken } from '../api/client';
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, totpCode?: string) => Promise<{ requiresTotp: boolean }>;
   register: (email: string, password: string, full_name: string) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -28,10 +28,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const login = async (email: string, password: string) => {
-    const { token, user } = await authApi.login(email, password);
-    setToken(token);
-    setUser(user);
+  const login = async (email: string, password: string, totpCode?: string): Promise<{ requiresTotp: boolean }> => {
+    const result = await authApi.login(email, password, totpCode);
+    if (result.requires_totp) {
+      return { requiresTotp: true };
+    }
+    setToken(result.token!);
+    setUser(result.user!);
+    return { requiresTotp: false };
   };
 
   const register = async (email: string, password: string, full_name: string) => {
