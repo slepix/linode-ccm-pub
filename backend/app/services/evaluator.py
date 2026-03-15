@@ -964,6 +964,32 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
             return "non_compliant", f"Users with no SSH keys registered: {', '.join(missing_keys)}."
         return "compliant", None
 
+    # --- vpc_has_description ---
+    if ct == "vpc_has_description":
+        if not resource:
+            return "not_applicable", None
+        description = (specs.get("description") or "").strip()
+        return ("compliant", None) if description else ("non_compliant", "VPC has no description. Add a description to document its purpose and ownership.")
+
+    # --- vpc_subnet_rfc1918 ---
+    if ct == "vpc_subnet_rfc1918":
+        if not resource:
+            return "not_applicable", None
+        subnets = specs.get("subnets") or []
+        if not subnets:
+            return "not_applicable", "VPC has no subnets configured."
+        violations = []
+        for sub in subnets:
+            cidr = sub.get("ipv4") or ""
+            if not cidr:
+                continue
+            ip_part = cidr.split("/")[0]
+            if not _is_rfc1918(ip_part):
+                violations.append(f"Subnet '{sub.get('label', sub.get('id', '?'))}' uses non-RFC1918 range: {cidr}")
+        if violations:
+            return "non_compliant", "; ".join(violations)
+        return "compliant", None
+
     return "not_applicable", f"Unknown condition type: {ct}"
 
 
