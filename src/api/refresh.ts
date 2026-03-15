@@ -1,6 +1,8 @@
 import { api, getToken } from './client';
 
-const BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+const BASE = import.meta.env.VITE_API_BASE || (
+  import.meta.env.DEV ? 'http://localhost:8000' : ''
+);
 
 export interface RefreshResult {
   success: boolean;

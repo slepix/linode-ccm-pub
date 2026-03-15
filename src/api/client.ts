@@ -1,7 +1,7 @@
 // When deployed with nginx, API is proxied through /api
 // In development, VITE_API_BASE can point directly to backend
 const BASE = import.meta.env.VITE_API_BASE || (
-  import.meta.env.DEV ? 'http://localhost:8000' : '/api'
+  import.meta.env.DEV ? 'http://localhost:8000' : ''
 );
 
 const TOKEN_KEY = 'auth_token';
