@@ -258,6 +258,8 @@ def _write_to_db(account_id: str, data: dict, db, log: list, now: datetime) -> t
             "created_at": ln.get("created"),
             "watchdog_enabled": ln.get("watchdog_enabled", False),
             "alerts": ln.get("alerts", {}),
+            "ipv4": ln.get("ipv4", []),
+            "ipv6": ln.get("ipv6"),
         }
         rid = upsert_resource(
             str(ln["id"]), "linode", ln["label"], ln.get("region"),
@@ -296,7 +298,8 @@ def _write_to_db(account_id: str, data: dict, db, log: list, now: datetime) -> t
             "nodes": all_nodes,
             "configs": [{"id": c["id"], "port": c["port"],
                          "protocol": c.get("protocol"),
-                         "algorithm": c.get("algorithm")} for c in configs],
+                         "algorithm": c.get("algorithm"),
+                         "client_conn_throttle": c.get("client_conn_throttle", 0)} for c in configs],
             "vpcs": [],
         }
         rid = upsert_resource(
@@ -316,6 +319,8 @@ def _write_to_db(account_id: str, data: dict, db, log: list, now: datetime) -> t
             "pool_count": len(pools),
             "high_availability": cl.get("control_plane", {}).get("high_availability", False),
             "audit_logs_enabled": cl.get("control_plane", {}).get("acl") is not None,
+            "vpc_id": cl.get("vpc_id"),
+            "subnet_id": cl.get("subnet_id"),
             "tags": cl.get("tags", []),
             "pools": [{"id": p["id"], "type": p.get("type"),
                        "count": p.get("count"), "autoscaler": p.get("autoscaler")} for p in pools],
@@ -366,6 +371,10 @@ def _write_to_db(account_id: str, data: dict, db, log: list, now: datetime) -> t
                               "0.0.0.0/0" in db_item.get("allow_list", [])),
             "allow_list": db_item.get("allow_list", []),
             "ssl_connection": detail.get("ssl_connection") if "ssl_connection" in detail else db_item.get("ssl_connection"),
+            "maintenance_dow": (detail.get("updates") or {}).get("day_of_week") or db_item.get("maintenance_dow"),
+            "maintenance_schedule": detail.get("updates") or db_item.get("updates"),
+            "backups_enabled": (detail.get("backups") or {}).get("enabled", False),
+            "backups_last_successful": (detail.get("backups") or {}).get("oldest_restore_date") or detail.get("last_backup_at") or db_item.get("last_backup_at"),
         }
         rid = upsert_resource(
             str(db_item["id"]), "database", db_item["label"], db_item.get("region"),
