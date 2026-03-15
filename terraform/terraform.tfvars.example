@@ -39,7 +39,7 @@ db_updates_hour_of_day = 3        # 03:00 UTC
 # ─── Application database (created by setup_db.py) ────────────────────────────
 # IMPORTANT: Use only letters, digits, and underscores (no hyphens!)
 
-app_db_name = "appdb"
+app_db_name = "lccmappdb"
 app_db_user = "appuser"
 
 # ─── Secrets (leave empty to auto-generate) ───────────────────────────────────
