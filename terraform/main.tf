@@ -57,7 +57,7 @@ resource "linode_firewall" "app" {
 
   inbound {
     label    = "allow-ssh"
-    action   = "ACCEPT"
+    action   = "DROP"
     protocol = "TCP"
     ports    = "22"
     ipv4     = ["0.0.0.0/0"]
@@ -78,15 +78,6 @@ resource "linode_firewall" "app" {
     action   = "ACCEPT"
     protocol = "TCP"
     ports    = "443"
-    ipv4     = ["0.0.0.0/0"]
-    ipv6     = ["::/0"]
-  }
-
-  inbound {
-    label    = "allow-api"
-    action   = "ACCEPT"
-    protocol = "TCP"
-    ports    = "8000"
     ipv4     = ["0.0.0.0/0"]
     ipv6     = ["::/0"]
   }
