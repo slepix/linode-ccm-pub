@@ -574,9 +574,9 @@ function RuleGroupRow({ group, onUpdated, isAuditor }: { group: RuleGroup; onUpd
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const allCompliant = group.nonCompliantCount === 0 && group.compliantCount > 0;
   const hasIssues = group.nonCompliantCount > 0;
   const allAcknowledged = hasIssues && group.acknowledgedCount >= group.nonCompliantCount;
+  const allCompliant = (group.nonCompliantCount === 0 && group.compliantCount > 0) || allAcknowledged;
 
   const selectableResults = group.results.filter(r => r.status === 'non_compliant' && !r.acknowledged);
 
@@ -624,10 +624,10 @@ function RuleGroupRow({ group, onUpdated, isAuditor }: { group: RuleGroup; onUpd
     setSelectedIds(new Set());
   };
 
-  const rowBg = hasIssues && !allAcknowledged
-    ? 'bg-red-500/5 border-red-500/20'
-    : allCompliant
+  const rowBg = allCompliant
     ? 'bg-green-500/5 border-green-500/20'
+    : hasIssues
+    ? 'bg-red-500/5 border-red-500/20'
     : 'border-lncard';
 
   return (
@@ -648,14 +648,14 @@ function RuleGroupRow({ group, onUpdated, isAuditor }: { group: RuleGroup; onUpd
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0 ml-2">
-          {hasIssues && (
-            <span className={`text-xs px-2 py-0.5 rounded font-medium ${allAcknowledged ? 'text-lnamber bg-ln-icon-amber' : 'text-lnred bg-ln-icon-red'}`}>
+          {hasIssues && !allAcknowledged && (
+            <span className="text-xs px-2 py-0.5 rounded font-medium text-lnred bg-ln-icon-red">
               {group.nonCompliantCount} failing
             </span>
           )}
           {allCompliant && (
             <span className="text-xs px-2 py-0.5 rounded text-lngreen bg-lngreen/10 font-medium">
-              all passing
+              {allAcknowledged ? 'all resolved' : 'all passing'}
             </span>
           )}
           {!hasIssues && !allCompliant && group.notApplicableCount > 0 && (
@@ -825,9 +825,9 @@ export default function CompliancePage({ account }: Props) {
   }
 
   const ruleGroups = buildRuleGroups(results);
-  const failingGroups = ruleGroups.filter(g => g.nonCompliantCount > 0);
-  const passingGroups = ruleGroups.filter(g => g.nonCompliantCount === 0 && g.compliantCount > 0);
-  const naGroups = ruleGroups.filter(g => g.nonCompliantCount === 0 && g.compliantCount === 0);
+  const failingGroups = ruleGroups.filter(g => g.nonCompliantCount > 0 && g.acknowledgedCount < g.nonCompliantCount);
+  const passingGroups = ruleGroups.filter(g => g.nonCompliantCount === 0 ? g.compliantCount > 0 : g.acknowledgedCount >= g.nonCompliantCount);
+  const naGroups = ruleGroups.filter(g => g.nonCompliantCount === 0 && g.compliantCount === 0 && g.acknowledgedCount === 0);
 
   return (
     <div className="flex-1 p-8 overflow-auto">
