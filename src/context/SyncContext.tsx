@@ -8,8 +8,10 @@ interface SyncContextValue {
   syncSummary: SyncSummary;
   showProgress: boolean;
   syncing: boolean;
+  complianceVersion: number;
   startSync: (accountId: string, onDone?: () => void) => void;
   dismissProgress: () => void;
+  notifyComplianceUpdated: () => void;
 }
 
 const SyncContext = createContext<SyncContextValue | null>(null);
@@ -19,7 +21,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const [syncLogs, setSyncLogs] = useState<string[]>([]);
   const [syncSummary, setSyncSummary] = useState<SyncSummary>({});
   const [showProgress, setShowProgress] = useState(false);
+  const [complianceVersion, setComplianceVersion] = useState(0);
   const stopStreamRef = useRef<(() => void) | null>(null);
+
+  const notifyComplianceUpdated = () => setComplianceVersion(v => v + 1);
 
   const syncing = showProgress && syncPhase !== 'done' && syncPhase !== 'error';
 
@@ -55,6 +60,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           }));
         } else if (event.type === 'done') {
           setSyncPhase('done');
+          setComplianceVersion(v => v + 1);
           onDone?.();
         } else if (event.type === 'error') {
           setSyncPhase('error');
@@ -83,8 +89,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       syncSummary,
       showProgress,
       syncing,
+      complianceVersion,
       startSync,
       dismissProgress,
+      notifyComplianceUpdated,
     }}>
       {children}
     </SyncContext.Provider>

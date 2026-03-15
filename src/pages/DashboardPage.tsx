@@ -73,7 +73,7 @@ export default function DashboardPage({ account, onAccountUpdated }: Props) {
   const [score, setScore] = useState<ComplianceScore | null>(null);
   const [resources, setResources] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(false);
-  const { syncing, startSync } = useSync();
+  const { syncing, startSync, complianceVersion } = useSync();
   const { user } = useAuth();
   const isAuditor = user?.role === 'auditor';
 
@@ -97,7 +97,7 @@ export default function DashboardPage({ account, onAccountUpdated }: Props) {
       setScore(s as ComplianceScore | null);
       setResources(r as Resource[]);
     }).finally(() => setLoading(false));
-  }, [account]);
+  }, [account, complianceVersion]);
 
   const handleSync = () => {
     if (!account || syncing) return;

@@ -9,6 +9,7 @@ import { complianceApi, ComplianceResult, ComplianceScore } from '../api/complia
 import { streamRefresh, SyncEvent } from '../api/refresh';
 import SyncProgressPanel, { Phase, SyncSummary } from '../components/SyncProgressPanel';
 import { useAuth } from '../context/AuthContext';
+import { useSync } from '../context/SyncContext';
 
 const SEV_COLORS: Record<string, string> = {
   critical: 'text-lnred bg-lnred/10 border-lnred/40',
@@ -734,6 +735,7 @@ export default function CompliancePage({ account }: Props) {
   const [filterSeverity, setFilterSeverity] = useState('');
   const { user } = useAuth();
   const isAuditor = user?.role === 'auditor';
+  const { notifyComplianceUpdated } = useSync();
 
   const [syncPhase, setSyncPhase] = useState<Phase>('idle');
   const [syncLogs, setSyncLogs] = useState<string[]>([]);
@@ -765,6 +767,11 @@ export default function CompliancePage({ account }: Props) {
 
   useEffect(() => { load(); }, [load]);
 
+  const loadAndNotify = useCallback(async () => {
+    await load();
+    notifyComplianceUpdated();
+  }, [load, notifyComplianceUpdated]);
+
   const handleSync = () => {
     if (!account || syncing) return;
     setSyncPhase('evaluate');
@@ -789,7 +796,7 @@ export default function CompliancePage({ account }: Props) {
           }));
         } else if (event.type === 'done') {
           setSyncPhase('done');
-          load();
+          loadAndNotify();
         } else if (event.type === 'error') {
           setSyncPhase('error');
           setSyncLogs(prev => [...prev, `ERROR: ${event.message}`]);
@@ -921,13 +928,13 @@ export default function CompliancePage({ account }: Props) {
         ) : (
           <div className="space-y-4">
             {failingGroups.length > 0 && (
-              <RuleSection label={`Failing Rules (${failingGroups.length})`} groups={failingGroups} onUpdated={load} defaultOpen isAuditor={isAuditor} />
+              <RuleSection label={`Failing Rules (${failingGroups.length})`} groups={failingGroups} onUpdated={loadAndNotify} defaultOpen isAuditor={isAuditor} />
             )}
             {passingGroups.length > 0 && (
-              <RuleSection label={`Passing Rules (${passingGroups.length})`} groups={passingGroups} onUpdated={load} defaultOpen={false} isAuditor={isAuditor} />
+              <RuleSection label={`Passing Rules (${passingGroups.length})`} groups={passingGroups} onUpdated={loadAndNotify} defaultOpen={false} isAuditor={isAuditor} />
             )}
             {naGroups.length > 0 && (
-              <RuleSection label={`Not Applicable (${naGroups.length})`} groups={naGroups} onUpdated={load} defaultOpen={false} isAuditor={isAuditor} />
+              <RuleSection label={`Not Applicable (${naGroups.length})`} groups={naGroups} onUpdated={loadAndNotify} defaultOpen={false} isAuditor={isAuditor} />
             )}
           </div>
         )}

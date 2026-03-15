@@ -9,6 +9,7 @@ import { LinodeAccount } from '../api/accounts';
 import { reportsApi, Report, ReportSnapshot, ReportRuleSummary } from '../api/reports';
 import { exportReportPdf } from '../utils/exportReportPdf';
 import { exportReportCsv, exportReportXls } from '../utils/exportReportCsv';
+import { useSync } from '../context/SyncContext';
 
 interface Props {
   account: LinodeAccount | null;
@@ -691,6 +692,7 @@ export default function ReportsPage({ account }: Props) {
   const [loadingReport, setLoadingReport] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+  const { complianceVersion } = useSync();
 
   const load = useCallback(async () => {
     if (!account) return;
@@ -706,7 +708,7 @@ export default function ReportsPage({ account }: Props) {
   useEffect(() => {
     load();
     setSelectedReport(null);
-  }, [account]);
+  }, [account, complianceVersion]);
 
   useEffect(() => {
     load();
