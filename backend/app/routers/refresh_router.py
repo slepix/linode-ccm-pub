@@ -89,9 +89,9 @@ def refresh_scheduled(
 
         cur.execute(
             """
-            SELECT MAX(last_synced_at) AS last_sync
+            SELECT MAX(last_sync_at) AS last_sync
             FROM linode_accounts
-            WHERE last_synced_at IS NOT NULL
+            WHERE last_sync_at IS NOT NULL
             """
         )
         result = cur.fetchone()
