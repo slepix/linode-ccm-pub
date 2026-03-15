@@ -184,7 +184,7 @@ resource "local_file" "backend_env" {
     jwt_expire_minutes   = var.jwt_expire_minutes
     refresh_api_secret   = local.refresh_api_secret
     token_encryption_key = local.token_encryption_key
-    cors_origins         = var.cors_origins != "" ? var.cors_origins : "http://${replace(linode_instance.app.ip_address, ".", "-")}.ip.linodeusercontent.com"
+    cors_origins         = var.cors_origins != "" ? var.cors_origins : "http://${replace(linode_instance.app.ipv4[0], ".", "-")}.ip.linodeusercontent.com"
     trusted_proxy_count  = var.trusted_proxy_count
     allow_registration   = var.allow_registration
   })
