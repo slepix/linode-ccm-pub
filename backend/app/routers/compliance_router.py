@@ -87,13 +87,60 @@ def get_score(account_id: str = Query(...), current_user=Depends(get_current_use
     if not _user_can_access(current_user, account_id, db):
         raise HTTPException(status_code=403, detail="Access denied")
     cur = db.cursor()
+
     cur.execute("""
-        SELECT * FROM compliance_score_history
-        WHERE account_id = %s
-        ORDER BY evaluated_at DESC LIMIT 1
+        SELECT
+            cr.rule_id,
+            rule.name as rule_name,
+            rule.severity,
+            CASE WHEN cr.acknowledged = TRUE THEN 'compliant' ELSE cr.status END as effective_status
+        FROM compliance_results cr
+        JOIN compliance_rules rule ON rule.id = cr.rule_id
+        WHERE cr.account_id = %s
+          AND cr.status != 'not_applicable'
     """, (account_id,))
-    row = cur.fetchone()
-    return dict(row) if row else {}
+    rows = cur.fetchall()
+
+    if not rows:
+        cur.execute("""
+            SELECT * FROM compliance_score_history
+            WHERE account_id = %s
+            ORDER BY evaluated_at DESC LIMIT 1
+        """, (account_id,))
+        row = cur.fetchone()
+        return dict(row) if row else {}
+
+    compliant = sum(1 for r in rows if r["effective_status"] == "compliant")
+    non_compliant = sum(1 for r in rows if r["effective_status"] == "non_compliant")
+    total = compliant + non_compliant
+    compliance_score = round((compliant / total) * 100, 1) if total > 0 else None
+
+    rule_breakdown = {}
+    for r in rows:
+        rid = str(r["rule_id"])
+        if rid not in rule_breakdown:
+            rule_breakdown[rid] = {"rule_id": rid, "rule_name": r["rule_name"], "severity": r["severity"], "compliant": 0, "non_compliant": 0}
+        if r["effective_status"] == "compliant":
+            rule_breakdown[rid]["compliant"] += 1
+        elif r["effective_status"] == "non_compliant":
+            rule_breakdown[rid]["non_compliant"] += 1
+
+    cur.execute("""
+        SELECT evaluated_at FROM compliance_score_history
+        WHERE account_id = %s ORDER BY evaluated_at DESC LIMIT 1
+    """, (account_id,))
+    score_row = cur.fetchone()
+    evaluated_at = score_row["evaluated_at"].isoformat() if score_row else None
+
+    return {
+        "account_id": account_id,
+        "compliance_score": compliance_score,
+        "compliant_count": compliant,
+        "non_compliant_count": non_compliant,
+        "total_checks": total,
+        "evaluated_at": evaluated_at,
+        "rule_breakdown": list(rule_breakdown.values()),
+    }
 
 
 @router.get("/score/history")
