@@ -29,7 +29,7 @@ output "vm_label" {
 
 output "vm_public_ip" {
   description = "Public IPv4 address of the application VM."
-  value       = linode_instance.app.ipv4[0]
+  value       = local.vm_public_ip
 }
 
 output "vm_ipv6" {
@@ -125,25 +125,25 @@ output "token_encryption_key" {
 
 output "app_url" {
   description = "Public URL of the frontend application."
-  value       = "http://${linode_instance.app.ipv4[0]}"
+  value       = "http://${local.vm_public_ip}"
 }
 
 output "api_url" {
   description = "Public URL of the backend API."
-  value       = "http://${linode_instance.app.ipv4[0]}:8000"
+  value       = "http://${local.vm_public_ip}:8000"
 }
 
 output "rdns_hostname" {
   description = "Linode default rDNS hostname for the VM (usable immediately without custom DNS)."
-  value       = "${replace(linode_instance.app.ipv4[0], ".", "-")}.ip.linodeusercontent.com"
+  value       = "${replace(local.vm_public_ip, ".", "-")}.ip.linodeusercontent.com"
 }
 
 output "cors_origins" {
   description = "Effective CORS origin(s) configured for the backend API."
-  value       = var.cors_origins != "" ? var.cors_origins : "http://${replace(linode_instance.app.ipv4[0], ".", "-")}.ip.linodeusercontent.com"
+  value       = var.cors_origins != "" ? var.cors_origins : "http://${replace(local.vm_public_ip, ".", "-")}.ip.linodeusercontent.com"
 }
 
 output "bootstrap_log_command" {
   description = "SSH command to tail the bootstrap log on the VM."
-  value       = "ssh root@${linode_instance.app.ipv4[0]} tail -f /var/log/user_data.log"
+  value       = "ssh root@${local.vm_public_ip} tail -f /var/log/user_data.log"
 }

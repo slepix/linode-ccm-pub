@@ -23,8 +23,9 @@ locals {
   _raw_fernet_key      = replace(replace(random_bytes.token_encryption_key.base64, "+", "-"), "/", "_")
   token_encryption_key = var.token_encryption_key != "" ? var.token_encryption_key : local._raw_fernet_key
 
-  vm_label = "linode-ccm-${var.env_label}-app"
-  db_label = "linode-ccm-${var.env_label}-db"
+  vm_label      = "linode-ccm-${var.env_label}-app"
+  db_label      = "linode-ccm-${var.env_label}-db"
+  vm_public_ip  = tolist(linode_instance.app.ipv4)[0]
 
   common_tags = concat(
     [var.env_label, "terraform"],
@@ -184,7 +185,7 @@ resource "local_file" "backend_env" {
     jwt_expire_minutes   = var.jwt_expire_minutes
     refresh_api_secret   = local.refresh_api_secret
     token_encryption_key = local.token_encryption_key
-    cors_origins         = var.cors_origins != "" ? var.cors_origins : "http://${replace(linode_instance.app.ipv4[0], ".", "-")}.ip.linodeusercontent.com"
+    cors_origins         = var.cors_origins != "" ? var.cors_origins : "http://${replace(local.vm_public_ip, ".", "-")}.ip.linodeusercontent.com"
     trusted_proxy_count  = var.trusted_proxy_count
     allow_registration   = var.allow_registration
   })
