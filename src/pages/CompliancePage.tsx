@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Search, RefreshCw, CheckCircle, XCircle, MinusCircle,
   ChevronDown, ChevronUp, MessageSquare, Check, X, Loader2,
-  AlertTriangle, Info, User, Globe, CheckSquare, Square,
+  AlertTriangle, User, Globe, CheckSquare, Square, ShieldCheck,
 } from 'lucide-react';
 import { LinodeAccount } from '../api/accounts';
 import { complianceApi, ComplianceResult, ComplianceScore } from '../api/compliance';
@@ -219,27 +219,42 @@ interface ResourceRowProps {
 
 function ResourceRow({ result, onUpdated, selectable, selected, onToggleSelect, isAuditor }: ResourceRowProps) {
   const [expanded, setExpanded] = useState(false);
-  const [ackMode, setAckMode] = useState(false);
-  const [ackNote, setAckNote] = useState('');
+  const [resolveMode, setResolveMode] = useState(false);
+  const [resolveNote, setResolveNote] = useState('');
   const [loading, setLoading] = useState(false);
   const [notes, setNotes] = useState<Array<{ id: string; note: string; created_at: string; author_name?: string }>>([]);
   const [noteText, setNoteText] = useState('');
   const [addingNote, setAddingNote] = useState(false);
 
+  const isResolved = result.status === 'non_compliant' && result.acknowledged;
+
   const StatusIcon =
+    isResolved ? ShieldCheck :
     result.status === 'compliant' ? CheckCircle :
     result.status === 'non_compliant' ? XCircle : MinusCircle;
 
   const statusColor =
+    isResolved ? 'text-lngreen' :
     result.status === 'compliant' ? 'text-lngreen' :
     result.status === 'non_compliant' ? 'text-lnred' : 'text-lnfaint';
 
-  const handleAck = async (ack: boolean) => {
+  const handleResolve = async () => {
+    if (!resolveNote.trim()) return;
     setLoading(true);
     try {
-      await complianceApi.acknowledge(result.id, ack, ack ? ackNote : undefined);
-      setAckMode(false);
-      setAckNote('');
+      await complianceApi.acknowledge(result.id, true, resolveNote.trim());
+      setResolveMode(false);
+      setResolveNote('');
+      onUpdated();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUnresolve = async () => {
+    setLoading(true);
+    try {
+      await complianceApi.acknowledge(result.id, false);
       onUpdated();
     } finally {
       setLoading(false);
@@ -321,7 +336,7 @@ function ResourceRow({ result, onUpdated, selectable, selected, onToggleSelect, 
   const isSelectableItem = selectable && result.status === 'non_compliant' && !result.acknowledged;
 
   return (
-    <div className={`border-b border-lncard/60 last:border-0 ${result.acknowledged ? 'opacity-60' : ''} ${selected ? 'bg-lncyan2/5' : ''}`}>
+    <div className={`border-b border-lncard/60 last:border-0 ${isResolved ? 'opacity-70' : ''} ${selected ? 'bg-lncyan2/5' : ''}`}>
       <div
         className={`flex items-center gap-3 px-4 py-2.5 transition pl-4 ${isSelectableItem ? 'cursor-pointer hover:bg-lncyan2/5' : 'hover:bg-lncard/40 cursor-pointer'}`}
         onClick={handleRowClick}
@@ -341,19 +356,20 @@ function ResourceRow({ result, onUpdated, selectable, selected, onToggleSelect, 
 
         <div className="flex-1 min-w-0">
           <span className="text-sm text-lnmuted">{resourceLabel}</span>
-          {result.acknowledged && (
-            <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-lnborder text-lnmuted border border-lnborder2">
-              ack
+          {isResolved && (
+            <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-lngreen/10 text-lngreen border border-lngreen/30">
+              resolved
             </span>
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <span className={`text-xs px-2 py-0.5 rounded ${
+            isResolved ? 'text-lngreen bg-lngreen/10' :
             result.status === 'compliant' ? 'text-lngreen bg-lngreen/10' :
             result.status === 'non_compliant' ? 'text-lnred bg-lnred/10' :
             'text-lnmuted bg-lncard'
           }`}>
-            {result.status.replace(/_/g, ' ')}
+            {isResolved ? 'resolved' : result.status.replace(/_/g, ' ')}
           </span>
           {!selectable && (
             expanded ? <ChevronUp className="w-3.5 h-3.5 text-lnfaint" /> : <ChevronDown className="w-3.5 h-3.5 text-lnfaint" />
@@ -367,47 +383,63 @@ function ResourceRow({ result, onUpdated, selectable, selected, onToggleSelect, 
 
           {!isAuditor && (
             <div className="flex items-center gap-2">
-              {result.status === 'non_compliant' && !result.acknowledged && !ackMode && (
+              {result.status === 'non_compliant' && !result.acknowledged && !resolveMode && (
                 <button
-                  onClick={() => setAckMode(true)}
-                  className="text-xs px-3 py-1.5 rounded bg-ln-icon-amber border border-lnborder2 text-lnamber hover:bg-lnborder transition"
+                  onClick={() => setResolveMode(true)}
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded bg-lngreen/10 border border-lngreen/30 text-lngreen hover:bg-lngreen/20 transition"
                 >
-                  Acknowledge
+                  <ShieldCheck className="w-3 h-3" />
+                  Mark As Resolved
                 </button>
               )}
-              {result.acknowledged && (
+              {isResolved && (
                 <button
-                  onClick={() => handleAck(false)}
+                  onClick={handleUnresolve}
                   disabled={loading}
-                  className="text-xs px-3 py-1.5 rounded bg-lnborder text-lnmuted hover:bg-lnborder2 transition"
+                  className="text-xs px-3 py-1.5 rounded bg-lnborder text-lnmuted hover:bg-lnborder2 transition disabled:opacity-50"
                 >
-                  Un-acknowledge
+                  Reopen
                 </button>
               )}
             </div>
           )}
 
-          {!isAuditor && ackMode && (
-            <div className="bg-lncard rounded p-3 space-y-2">
-              <div className="text-xs text-lnmuted font-medium">Acknowledgment note (optional)</div>
-              <textarea
-                value={ackNote}
-                onChange={e => setAckNote(e.target.value)}
-                rows={2}
-                className="w-full bg-lnborder border border-lnborder2 rounded px-3 py-2 text-sm text-lntext placeholder-lnfaint focus:outline-none focus:border-lncyan2 resize-none"
-                placeholder="Reason for acknowledgment..."
-              />
+          {!isAuditor && resolveMode && (
+            <div className="bg-lncard rounded-lg border border-lngreen/20 p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-lngreen shrink-0" />
+                <div>
+                  <div className="text-sm font-medium text-lntext">Mark As Resolved</div>
+                  <div className="text-xs text-lnfaint">A note explaining the resolution is required.</div>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-lnmuted uppercase tracking-wider mb-1.5">
+                  Resolution Note <span className="text-lnred">*</span>
+                </label>
+                <textarea
+                  value={resolveNote}
+                  onChange={e => setResolveNote(e.target.value)}
+                  rows={3}
+                  autoFocus
+                  className="w-full bg-lnborder border border-lnborder2 rounded px-3 py-2 text-sm text-lntext placeholder-lnfaint focus:outline-none focus:border-lngreen resize-none"
+                  placeholder="Describe how this finding was resolved or why it is acceptable..."
+                />
+                {resolveNote.trim() === '' && (
+                  <p className="mt-1 text-xs text-lnfaint">A note is required to mark a finding as resolved.</p>
+                )}
+              </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => handleAck(true)}
-                  disabled={loading}
-                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded bg-lngreen hover:bg-lngreen/80 text-white transition"
+                  onClick={handleResolve}
+                  disabled={loading || !resolveNote.trim()}
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded bg-lngreen hover:bg-lngreen/80 disabled:opacity-40 disabled:cursor-not-allowed text-white transition"
                 >
-                  {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                  Confirm
+                  {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
+                  Confirm Resolution
                 </button>
                 <button
-                  onClick={() => setAckMode(false)}
+                  onClick={() => { setResolveMode(false); setResolveNote(''); }}
                   className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded bg-lnborder text-lnmuted hover:bg-lnborder2 transition"
                 >
                   <X className="w-3 h-3" /> Cancel
@@ -416,19 +448,19 @@ function ResourceRow({ result, onUpdated, selectable, selected, onToggleSelect, 
             </div>
           )}
 
-          {result.acknowledged && (
-            <div className="bg-lncard/60 rounded p-2.5 text-xs border border-lnborder/50 space-y-0.5">
-              <div className="flex items-center gap-1.5 text-lnmuted">
-                <Check className="w-3 h-3 text-lngreen shrink-0" />
+          {isResolved && (
+            <div className="bg-lngreen/5 rounded p-2.5 text-xs border border-lngreen/20 space-y-0.5">
+              <div className="flex items-center gap-1.5 text-lngreen">
+                <ShieldCheck className="w-3 h-3 shrink-0" />
                 <span>
-                  Acknowledged by <span className="text-lntext font-medium">{result.acknowledged_by_name || 'Unknown'}</span>
+                  Resolved by <span className="text-lntext font-medium">{result.acknowledged_by_name || 'Unknown'}</span>
                   {result.acknowledged_at && (
                     <span className="text-lnfaint"> · {new Date(result.acknowledged_at).toLocaleString()}</span>
                   )}
                 </span>
               </div>
               {result.acknowledged_note && (
-                <div className="text-lnfaint italic pl-4.5 ml-0.5">{result.acknowledged_note}</div>
+                <div className="text-lnmuted italic pl-4 mt-1">{result.acknowledged_note}</div>
               )}
             </div>
           )}
@@ -827,9 +859,9 @@ export default function CompliancePage({ account }: Props) {
         )}
 
         {(score || results.length > 0) && (() => {
-          const compliantCount = results.filter(r => r.status === 'compliant').length;
-          const nonCompliantCount = results.filter(r => r.status === 'non_compliant').length;
-          const acknowledgedCount = results.filter(r => r.acknowledged).length;
+          const resolvedCount = results.filter(r => r.status === 'non_compliant' && r.acknowledged).length;
+          const compliantCount = results.filter(r => r.status === 'compliant').length + resolvedCount;
+          const openNonCompliantCount = results.filter(r => r.status === 'non_compliant' && !r.acknowledged).length;
           const total = results.filter(r => r.status !== 'not_applicable').length;
           const liveScore = total > 0 ? Math.round((compliantCount / total) * 100) : (score?.compliance_score ?? null);
           return (
@@ -837,8 +869,8 @@ export default function CompliancePage({ account }: Props) {
               {[
                 { label: 'Score', value: liveScore != null ? `${liveScore}%` : 'N/A', color: 'text-lncyan2' },
                 { label: 'Compliant', value: compliantCount, color: 'text-lngreen' },
-                { label: 'Non-Compliant', value: nonCompliantCount, color: 'text-lnred' },
-                { label: 'Acknowledged', value: acknowledgedCount, color: 'text-lnamber' },
+                { label: 'Non-Compliant', value: openNonCompliantCount, color: 'text-lnred' },
+                { label: 'Resolved', value: resolvedCount, color: 'text-lngreen' },
               ].map(({ label, value, color }) => (
                 <div key={label} className="bg-lndark rounded border border-lncard p-4 text-center">
                   <div className={`text-2xl font-bold ${color}`}>{value}</div>
