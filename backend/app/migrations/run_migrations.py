@@ -1,4 +1,3 @@
-import os
 import sys
 from pathlib import Path
 
@@ -6,6 +5,34 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import psycopg2
 from app.config import settings
+
+
+def _table_exists(cur, table_name: str) -> bool:
+    cur.execute(
+        "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = %s",
+        (table_name,),
+    )
+    return cur.fetchone() is not None
+
+
+_MIGRATION_GUARD_TABLES = {
+    "001_initial_schema.sql": "resources",
+    "002_seed_rules_profiles.sql": "compliance_profiles",
+    "003_profiles_overrides_improvements.sql": "account_rule_overrides",
+    "004_unique_builtin_rules.sql": "compliance_rules",
+    "005_account_rule_configs.sql": "account_rule_configs",
+    "006_new_compliance_rules.sql": "compliance_rules",
+    "007_reports.sql": "compliance_reports",
+    "008_seventeen_new_rules.sql": "compliance_rules",
+    "009_new_security_profiles.sql": "compliance_profiles",
+    "010_security_schema_fixes.sql": "compliance_results",
+    "011_revoked_tokens.sql": "revoked_tokens",
+    "012_sync_schedule.sql": "app_settings",
+    "013_vpc_rules.sql": "compliance_rules",
+    "014_two_factor_auth.sql": "org_users",
+    "015_totp_lockout.sql": "org_users",
+    "016_sync_profile_rule_counts.sql": "compliance_profiles",
+}
 
 
 def run():
@@ -34,6 +61,12 @@ def run():
         cur.execute("SELECT 1 FROM schema_migrations WHERE filename = %s", (sql_file.name,))
         if cur.fetchone():
             print(f"Skipping {sql_file.name} (already applied)")
+            continue
+
+        guard_table = _MIGRATION_GUARD_TABLES.get(sql_file.name)
+        if guard_table and _table_exists(cur, guard_table):
+            print(f"Marking {sql_file.name} as applied (table '{guard_table}' already exists)")
+            cur.execute("INSERT INTO schema_migrations (filename) VALUES (%s)", (sql_file.name,))
             continue
 
         print(f"Running {sql_file.name}...")
