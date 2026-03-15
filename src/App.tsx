@@ -22,6 +22,7 @@ import UsersPage from './pages/UsersPage';
 import RulesPage from './pages/RulesPage';
 import ComplianceSettingsPage from './pages/ComplianceSettingsPage';
 import ReportsPage from './pages/ReportsPage';
+import OnboardingWizard from './components/OnboardingWizard';
 import { accountsApi, LinodeAccount } from './api/accounts';
 import SyncProgressPanel from './components/SyncProgressPanel';
 import { Loader2 } from 'lucide-react';
@@ -32,6 +33,7 @@ function AppShell() {
   const location = useLocation();
   const [accounts, setAccounts] = useState<LinodeAccount[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<LinodeAccount | null>(null);
+  const [accountsLoaded, setAccountsLoaded] = useState(false);
   const { showProgress, syncPhase, syncLogs, syncSummary, dismissProgress } = useSync();
 
   const currentView = location.pathname.replace('/', '') || 'dashboard';
@@ -44,6 +46,7 @@ function AppShell() {
         setSelectedAccount(acc[0]);
       }
     } catch {}
+    setAccountsLoaded(true);
   };
 
   useEffect(() => {
@@ -59,6 +62,17 @@ function AppShell() {
   }
 
   if (!user) return <LoginPage />;
+
+  const showOnboarding =
+    accountsLoaded &&
+    accounts.length === 0 &&
+    user.role === 'admin' &&
+    currentView !== 'accounts';
+
+  const handleOnboardingComplete = async () => {
+    await loadAccounts();
+    navigate('/dashboard');
+  };
 
   return (
     <div className="flex h-screen bg-lnbg overflow-hidden">
@@ -85,24 +99,30 @@ function AppShell() {
             />
           </div>
         )}
-        <main className="flex-1 overflow-auto">
-          <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<DashboardPage account={selectedAccount} onAccountUpdated={loadAccounts} />} />
-            <Route path="/compliance" element={<CompliancePage account={selectedAccount} />} />
-            <Route path="/reports" element={<ReportsPage account={selectedAccount} />} />
-            <Route path="/resources" element={<ResourcesPage account={selectedAccount} />} />
-            <Route path="/events" element={<EventsPage account={selectedAccount} />} />
-            <Route path="/rules" element={
-              (user?.role === 'admin' || user?.role === 'power_user')
-                ? <RulesPage account={selectedAccount} />
-                : <Navigate to="/dashboard" replace />
-            } />
-            <Route path="/accounts" element={<AccountsPage accounts={accounts} onChanged={loadAccounts} />} />
-            <Route path="/users" element={<UsersPage />} />
-            <Route path="/compliance-settings" element={<ComplianceSettingsPage account={selectedAccount} />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
+        <main className="flex-1 overflow-auto flex flex-col">
+          {showOnboarding ? (
+            <OnboardingWizard
+              onComplete={handleOnboardingComplete}
+            />
+          ) : (
+            <Routes>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/dashboard" element={<DashboardPage account={selectedAccount} onAccountUpdated={loadAccounts} />} />
+              <Route path="/compliance" element={<CompliancePage account={selectedAccount} />} />
+              <Route path="/reports" element={<ReportsPage account={selectedAccount} />} />
+              <Route path="/resources" element={<ResourcesPage account={selectedAccount} />} />
+              <Route path="/events" element={<EventsPage account={selectedAccount} />} />
+              <Route path="/rules" element={
+                (user?.role === 'admin' || user?.role === 'power_user')
+                  ? <RulesPage account={selectedAccount} />
+                  : <Navigate to="/dashboard" replace />
+              } />
+              <Route path="/accounts" element={<AccountsPage accounts={accounts} onChanged={loadAccounts} />} />
+              <Route path="/users" element={<UsersPage />} />
+              <Route path="/compliance-settings" element={<ComplianceSettingsPage account={selectedAccount} />} />
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
+          )}
         </main>
       </div>
     </div>
