@@ -938,8 +938,9 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
         ttl = specs.get("ttl_sec")
         if ttl is None:
             return "not_applicable", "Domain TTL is unknown."
+        effective_ttl = 86400 if ttl == 0 else ttl
         min_ttl = cfg.get("min_ttl_sec", 300)
-        return ("compliant", None) if ttl >= min_ttl else ("non_compliant", f"Domain TTL is {ttl}s, minimum is {min_ttl}s.")
+        return ("compliant", None) if effective_ttl >= min_ttl else ("non_compliant", f"Domain TTL is {effective_ttl}s, minimum is {min_ttl}s.")
 
     # --- domain_has_soa_email ---
     if ct == "domain_has_soa_email":

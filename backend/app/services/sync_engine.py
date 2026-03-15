@@ -385,17 +385,23 @@ def _write_to_db(account_id: str, data: dict, db, log: list, now: datetime) -> t
 
     logmsg("Writing domains...")
     for dom in data["domains_raw"]:
+        raw_ttl = dom.get("ttl_sec")
+        raw_retry = dom.get("retry_sec")
+        raw_expire = dom.get("expire_sec")
+        raw_refresh = dom.get("refresh_sec")
         specs = {
             "type": dom.get("type"),
             "status": dom.get("status"),
-            "soa_email": dom.get("soa_email", ""),
-            "ttl_sec": dom.get("ttl_sec"),
-            "retry_sec": dom.get("retry_sec"),
-            "expire_sec": dom.get("expire_sec"),
-            "refresh_sec": dom.get("refresh_sec"),
-            "description": dom.get("description", ""),
+            "soa_email": dom.get("soa_email") or "",
+            "ttl_sec": 86400 if raw_ttl == 0 else raw_ttl,
+            "retry_sec": 14400 if raw_retry == 0 else raw_retry,
+            "expire_sec": 1209600 if raw_expire == 0 else raw_expire,
+            "refresh_sec": 14400 if raw_refresh == 0 else raw_refresh,
+            "axfr_ips": dom.get("axfr_ips", []),
+            "master_ips": dom.get("master_ips", []),
+            "description": dom.get("description") or "",
             "tags": dom.get("tags", []),
-            "group": dom.get("group", ""),
+            "group": dom.get("group") or "",
         }
         rid = upsert_resource(
             str(dom["id"]), "domain", dom["domain"], None,
