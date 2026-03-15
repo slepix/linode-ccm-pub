@@ -396,11 +396,17 @@ def list_profiles(current_user=Depends(get_current_user), db=Depends(get_db)):
         WHERE account_id IS NULL AND is_active = TRUE
     """)
     row = cur.fetchone()
-    live_condition_types = list(row["all_condition_types"] or []) if row else []
+    live_condition_types_set = set(row["all_condition_types"] or []) if row else set()
+    live_condition_types = sorted(live_condition_types_set)
 
     for p in profiles:
         if p.get("slug") == "all-rules":
             p["rule_condition_types"] = live_condition_types
+        else:
+            p["rule_condition_types"] = [
+                ct for ct in (p.get("rule_condition_types") or [])
+                if ct in live_condition_types_set
+            ]
 
     return profiles
 
@@ -510,15 +516,16 @@ def toggle_profile(
         """, (profile_id,))
         profile = cur.fetchone()
         if profile:
+            cur.execute("""
+                SELECT ARRAY_AGG(DISTINCT condition_type) AS cts
+                FROM compliance_rules WHERE account_id IS NULL AND is_active = TRUE
+            """)
+            cts_row = cur.fetchone()
+            live_cts = set(cts_row["cts"] or []) if cts_row else set()
             if profile["slug"] == "all-rules":
-                cur.execute("""
-                    SELECT ARRAY_AGG(DISTINCT condition_type) AS cts
-                    FROM compliance_rules WHERE account_id IS NULL AND is_active = TRUE
-                """)
-                cts_row = cur.fetchone()
-                condition_types = list(cts_row["cts"] or []) if cts_row else []
+                condition_types = list(live_cts)
             else:
-                condition_types = profile["rule_condition_types"]
+                condition_types = [ct for ct in (profile["rule_condition_types"] or []) if ct in live_cts]
             for ct in condition_types:
                 cur.execute("""
                     SELECT id FROM compliance_rules WHERE condition_type = %s AND (account_id IS NULL OR account_id = %s)
