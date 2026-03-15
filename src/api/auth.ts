@@ -17,4 +17,6 @@ export const authApi = {
     api.post<{ token: string; user: User }>('/api/auth/register', { email, password, full_name }),
   me: () => api.get<User>('/api/auth/me'),
   logout: () => api.post<void>('/api/auth/logout'),
+  changePassword: (current_password: string, new_password: string) =>
+    api.post<{ ok: boolean }>('/api/auth/change-password', { current_password, new_password }),
 };

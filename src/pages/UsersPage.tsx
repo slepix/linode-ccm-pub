@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Trash2, Check, X, Loader2, Shield, User, KeyRound, ChevronDown, ChevronRight, Link2, Unlink } from 'lucide-react';
+import { Plus, Trash2, Check, X, Loader2, Shield, User, KeyRound, ChevronDown, ChevronRight, Link2, Unlink, Lock } from 'lucide-react';
 import { api } from '../api/client';
 import { accountsApi, LinodeAccount } from '../api/accounts';
+import ChangePasswordModal from '../components/ChangePasswordModal';
 
 interface OrgUser {
   id: string;
@@ -195,6 +196,7 @@ export default function UsersPage() {
   const [form, setForm] = useState({ email: '', password: '', full_name: '', role: 'auditor' });
   const [error, setError] = useState('');
   const [accessUser, setAccessUser] = useState<OrgUser | null>(null);
+  const [resetPasswordUser, setResetPasswordUser] = useState<OrgUser | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -326,6 +328,13 @@ export default function UsersPage() {
                     <span>Accounts</span>
                   </button>
                   <button
+                    onClick={() => setResetPasswordUser(u)}
+                    className="p-1.5 text-lnmuted hover:text-lncyan2 hover:bg-lncyan2/10 rounded transition"
+                    title="Reset password"
+                  >
+                    <Lock className="w-4 h-4" />
+                  </button>
+                  <button
                     onClick={() => handleToggleActive(u)}
                     className={`p-1.5 rounded transition ${u.is_active ? 'text-lnmuted hover:text-lnamber hover:bg-ln-icon-amber' : 'text-lngreen hover:bg-lngreen/10'}`}
                     title={u.is_active ? 'Deactivate' : 'Activate'}
@@ -347,6 +356,15 @@ export default function UsersPage() {
 
       {accessUser && (
         <AccountAccessModal user={accessUser} onClose={() => setAccessUser(null)} />
+      )}
+
+      {resetPasswordUser && (
+        <ChangePasswordModal
+          adminReset
+          userId={resetPasswordUser.id}
+          userName={resetPasswordUser.full_name || resetPasswordUser.email}
+          onClose={() => setResetPasswordUser(null)}
+        />
       )}
     </div>
   );

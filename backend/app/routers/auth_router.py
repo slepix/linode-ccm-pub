@@ -119,3 +119,30 @@ def me(current_user=Depends(get_current_user)):
         "can_view_costs": current_user["can_view_costs"],
         "can_view_compliance": current_user["can_view_compliance"],
     }
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@router.post("/change-password")
+def change_password(
+    body: ChangePasswordRequest,
+    current_user=Depends(get_current_user),
+    db=Depends(get_db),
+):
+    cur = db.cursor()
+    cur.execute("SELECT password_hash FROM org_users WHERE id = %s", (str(current_user["id"]),))
+    row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not verify_password(body.current_password, row["password_hash"]):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    validate_password(body.new_password)
+    new_hash = hash_password(body.new_password)
+    cur.execute(
+        "UPDATE org_users SET password_hash = %s, updated_at = NOW() WHERE id = %s",
+        (new_hash, str(current_user["id"])),
+    )
+    return {"ok": True}
