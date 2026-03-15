@@ -11,6 +11,8 @@ import threading
 
 logger = logging.getLogger(__name__)
 
+_sync_lock = threading.Lock()
+
 from app.database import get_db, get_conn
 from app.auth import get_current_user, require_power_or_admin
 from app.config import settings
@@ -72,43 +74,52 @@ def refresh_scheduled(
     if not _check_api_auth(request):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    cur = db.cursor()
+    if not _sync_lock.acquire(blocking=False):
+        return {
+            "skipped": True,
+            "reason": "Sync already in progress",
+        }
 
-    cur.execute("SELECT value FROM app_settings WHERE key = 'sync_interval_minutes'")
-    row = cur.fetchone()
-    interval_minutes = int(row["value"]) if row else 60
+    try:
+        cur = db.cursor()
 
-    cur.execute(
-        """
-        SELECT MAX(last_synced_at) AS last_sync
-        FROM linode_accounts
-        WHERE last_synced_at IS NOT NULL
-        """
-    )
-    result = cur.fetchone()
-    last_sync = result["last_sync"] if result else None
+        cur.execute("SELECT value FROM app_settings WHERE key = 'sync_interval_minutes'")
+        row = cur.fetchone()
+        interval_minutes = int(row["value"]) if row else 60
 
-    now = datetime.now(timezone.utc)
+        cur.execute(
+            """
+            SELECT MAX(last_synced_at) AS last_sync
+            FROM linode_accounts
+            WHERE last_synced_at IS NOT NULL
+            """
+        )
+        result = cur.fetchone()
+        last_sync = result["last_sync"] if result else None
 
-    if last_sync is not None:
-        if last_sync.tzinfo is None:
-            last_sync = last_sync.replace(tzinfo=timezone.utc)
-        elapsed_seconds = (now - last_sync).total_seconds()
-        elapsed_minutes = elapsed_seconds / 60
-        if elapsed_minutes < interval_minutes:
-            remaining = interval_minutes - elapsed_minutes
-            return {
-                "skipped": True,
-                "reason": "Data is fresh",
-                "last_sync": last_sync.isoformat(),
-                "interval_minutes": interval_minutes,
-                "next_sync_in_minutes": round(remaining, 1),
-            }
+        now = datetime.now(timezone.utc)
 
-    result = _do_refresh(None, False, False, db)
-    result["skipped"] = False
-    result["interval_minutes"] = interval_minutes
-    return result
+        if last_sync is not None:
+            if last_sync.tzinfo is None:
+                last_sync = last_sync.replace(tzinfo=timezone.utc)
+            elapsed_seconds = (now - last_sync).total_seconds()
+            elapsed_minutes = elapsed_seconds / 60
+            if elapsed_minutes < interval_minutes:
+                remaining = interval_minutes - elapsed_minutes
+                return {
+                    "skipped": True,
+                    "reason": "Data is fresh",
+                    "last_sync": last_sync.isoformat(),
+                    "interval_minutes": interval_minutes,
+                    "next_sync_in_minutes": round(remaining, 1),
+                }
+
+        result = _do_refresh(None, False, False, db)
+        result["skipped"] = False
+        result["interval_minutes"] = interval_minutes
+        return result
+    finally:
+        _sync_lock.release()
 
 
 @router.get("/api/refresh/stream")

@@ -1,6 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
+LOCK_FILE="/var/lock/ccm_sync.lock"
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] sync_cron: previous sync still running, skipping." >&2
+  exit 0
+fi
+
 ENV_FILE="$(dirname "$0")/.env"
 
 if [ ! -f "$ENV_FILE" ]; then
