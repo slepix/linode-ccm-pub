@@ -21,7 +21,7 @@ export default function ReportInsights({ reports }: Props) {
     const times: number[] = [];
     readyReports.forEach(r => {
       if (!r.snapshot) return;
-      r.snapshot.results.forEach(result => {
+      (r.snapshot.results ?? []).forEach(result => {
         if (result.acknowledged && result.acknowledged_at && result.evaluated_at) {
           const diff = new Date(result.acknowledged_at).getTime() - new Date(result.evaluated_at).getTime();
           if (diff > 0) times.push(diff);
@@ -37,7 +37,7 @@ export default function ReportInsights({ reports }: Props) {
     const map = new Map<string, { compliant: number; total: number }>();
     readyReports.forEach(r => {
       if (!r.snapshot) return;
-      r.snapshot.results.forEach(result => {
+      (r.snapshot.results ?? []).forEach(result => {
         if (!result.resource_type) return;
         const existing = map.get(result.resource_type) ?? { compliant: 0, total: 0 };
         existing.total++;
