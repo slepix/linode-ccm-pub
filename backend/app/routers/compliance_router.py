@@ -166,40 +166,6 @@ class AcknowledgeRequest(BaseModel):
     acknowledged_note: Optional[str] = None
 
 
-@router.put("/results/{result_id}/acknowledge")
-def acknowledge_result(
-    result_id: str,
-    body: AcknowledgeRequest,
-    current_user=Depends(get_current_user),
-    db=Depends(get_db),
-):
-    cur = db.cursor()
-    cur.execute("SELECT account_id FROM compliance_results WHERE id = %s", (result_id,))
-    row = cur.fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail="Result not found")
-    if not _user_can_access(current_user, str(row["account_id"]), db):
-        raise HTTPException(status_code=403, detail="Access denied")
-
-    if body.acknowledged:
-        cur.execute("""
-            UPDATE compliance_results
-            SET acknowledged = TRUE, acknowledged_at = NOW(),
-                acknowledged_note = %s, acknowledged_by = %s
-            WHERE id = %s
-            RETURNING id, acknowledged, acknowledged_at, acknowledged_note
-        """, (body.acknowledged_note, str(current_user["id"]), result_id))
-    else:
-        cur.execute("""
-            UPDATE compliance_results
-            SET acknowledged = FALSE, acknowledged_at = NULL,
-                acknowledged_note = NULL, acknowledged_by = NULL
-            WHERE id = %s
-            RETURNING id, acknowledged
-        """, (result_id,))
-    return dict(cur.fetchone())
-
-
 class BulkAcknowledgeRequest(BaseModel):
     result_ids: list[str] = Field(..., min_length=1, max_length=500)
     acknowledged: bool
@@ -255,6 +221,40 @@ def bulk_acknowledge_results(
             ids,
         )
     return {"ok": True, "updated": len(ids)}
+
+
+@router.put("/results/{result_id}/acknowledge")
+def acknowledge_result(
+    result_id: str,
+    body: AcknowledgeRequest,
+    current_user=Depends(get_current_user),
+    db=Depends(get_db),
+):
+    cur = db.cursor()
+    cur.execute("SELECT account_id FROM compliance_results WHERE id = %s", (result_id,))
+    row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Result not found")
+    if not _user_can_access(current_user, str(row["account_id"]), db):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if body.acknowledged:
+        cur.execute("""
+            UPDATE compliance_results
+            SET acknowledged = TRUE, acknowledged_at = NOW(),
+                acknowledged_note = %s, acknowledged_by = %s
+            WHERE id = %s
+            RETURNING id, acknowledged, acknowledged_at, acknowledged_note
+        """, (body.acknowledged_note, str(current_user["id"]), result_id))
+    else:
+        cur.execute("""
+            UPDATE compliance_results
+            SET acknowledged = FALSE, acknowledged_at = NULL,
+                acknowledged_note = NULL, acknowledged_by = NULL
+            WHERE id = %s
+            RETURNING id, acknowledged
+        """, (result_id,))
+    return dict(cur.fetchone())
 
 
 class NoteCreate(BaseModel):
