@@ -3,11 +3,18 @@ import {
   RefreshCw, Shield, CheckCircle, XCircle,
   Server, Clock, Loader2
 } from 'lucide-react';
-import { LinodeAccount } from '../api/accounts';
-import { complianceApi, ComplianceScore } from '../api/compliance';
+import { LinodeAccount, accountsApi } from '../api/accounts';
+import { complianceApi, ComplianceScore, ComplianceResult, ComplianceRule, ComplianceProfile } from '../api/compliance';
 import { resourcesApi, Resource } from '../api/resources';
+import { reportsApi, Report } from '../api/reports';
 import { useSync } from '../context/SyncContext';
 import { useAuth } from '../context/AuthContext';
+import ComplianceTrends from '../components/dashboard/ComplianceTrends';
+import RiskBreakdown from '../components/dashboard/RiskBreakdown';
+import AccountComparisons from '../components/dashboard/AccountComparisons';
+import ActivityFeed from '../components/dashboard/ActivityFeed';
+import CoverageMetrics from '../components/dashboard/CoverageMetrics';
+import ReportInsights from '../components/dashboard/ReportInsights';
 
 interface Props {
   account: LinodeAccount | null;
@@ -71,7 +78,14 @@ function StatCard({ label, value, icon: Icon, color }: {
 
 export default function DashboardPage({ account, onAccountUpdated }: Props) {
   const [score, setScore] = useState<ComplianceScore | null>(null);
+  const [scoreHistory, setScoreHistory] = useState<ComplianceScore[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
+  const [results, setResults] = useState<ComplianceResult[]>([]);
+  const [rules, setRules] = useState<ComplianceRule[]>([]);
+  const [allProfiles, setAllProfiles] = useState<ComplianceProfile[]>([]);
+  const [activeProfiles, setActiveProfiles] = useState<ComplianceProfile[]>([]);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [allAccounts, setAllAccounts] = useState<LinodeAccount[]>([]);
   const [loading, setLoading] = useState(false);
   const { syncing, startSync, complianceVersion } = useSync();
   const { user } = useAuth();
@@ -85,6 +99,12 @@ export default function DashboardPage({ account, onAccountUpdated }: Props) {
     resourcesApi.list(account.id).catch(() => []).then(r => {
       setResources(r as Resource[]);
     });
+    complianceApi.getScoreHistory(account.id, 30).catch(() => []).then(h => {
+      setScoreHistory(h as ComplianceScore[]);
+    });
+    complianceApi.getResults({ account_id: account.id }).catch(() => []).then(r => {
+      setResults(r as ComplianceResult[]);
+    });
   };
 
   useEffect(() => {
@@ -92,10 +112,24 @@ export default function DashboardPage({ account, onAccountUpdated }: Props) {
     setLoading(true);
     Promise.all([
       complianceApi.getScore(account.id).catch(() => null),
+      complianceApi.getScoreHistory(account.id, 30).catch(() => []),
       resourcesApi.list(account.id).catch(() => []),
-    ]).then(([s, r]) => {
+      complianceApi.getResults({ account_id: account.id }).catch(() => []),
+      complianceApi.getRules(account.id).catch(() => []),
+      complianceApi.getProfiles().catch(() => []),
+      complianceApi.getActiveProfiles(account.id).catch(() => []),
+      reportsApi.list(account.id).catch(() => []),
+      accountsApi.list().catch(() => []),
+    ]).then(([s, h, r, res, rul, allProf, activeProf, reps, accounts]) => {
       setScore(s as ComplianceScore | null);
+      setScoreHistory(h as ComplianceScore[]);
       setResources(r as Resource[]);
+      setResults(res as ComplianceResult[]);
+      setRules(rul as ComplianceRule[]);
+      setAllProfiles(allProf as ComplianceProfile[]);
+      setActiveProfiles(activeProf as ComplianceProfile[]);
+      setReports(reps as Report[]);
+      setAllAccounts(accounts as LinodeAccount[]);
     }).finally(() => setLoading(false));
   }, [account, complianceVersion]);
 
@@ -239,6 +273,31 @@ export default function DashboardPage({ account, onAccountUpdated }: Props) {
                       );
                     })}
                 </div>
+              </div>
+            )}
+
+            <div className="mb-4">
+              <ComplianceTrends history={scoreHistory} />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+              <RiskBreakdown results={results} score={score} />
+              <ActivityFeed history={scoreHistory} results={results} />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+              <CoverageMetrics
+                rules={rules}
+                activeProfiles={activeProfiles}
+                allProfiles={allProfiles}
+                resources={resources}
+              />
+              <ReportInsights reports={reports} />
+            </div>
+
+            {allAccounts.length > 1 && (
+              <div className="mb-4">
+                <AccountComparisons accounts={allAccounts} currentAccountId={account.id} />
               </div>
             )}
           </>
