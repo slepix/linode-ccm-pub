@@ -1,20 +1,11 @@
-// When deployed with nginx, API is proxied through /api
-// In development, VITE_API_BASE can point directly to backend
 const BASE = import.meta.env.VITE_API_BASE || (
   import.meta.env.DEV ? 'http://localhost:8000' : ''
 );
 
-const TOKEN_KEY = 'auth_token';
-
-let _memToken: string | null = localStorage.getItem(TOKEN_KEY);
+let _memToken: string | null = null;
 
 export function setToken(token: string | null): void {
   _memToken = token;
-  if (token) {
-    localStorage.setItem(TOKEN_KEY, token);
-  } else {
-    localStorage.removeItem(TOKEN_KEY);
-  }
 }
 
 export function getToken(): string | null {
@@ -29,7 +20,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const res = await fetch(`${BASE}${path}`, { ...options, headers });
+  const res = await fetch(`${BASE}${path}`, {
+    ...options,
+    headers,
+    credentials: 'include',
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || res.statusText);

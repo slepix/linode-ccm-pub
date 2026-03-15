@@ -41,8 +41,9 @@ export function streamRefresh(
   let closed = false;
 
   fetch(url, {
+    credentials: 'include',
     headers: {
-      Authorization: token ? `Bearer ${token}` : '',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       Accept: 'text/event-stream',
     },
   }).then(async (res) => {

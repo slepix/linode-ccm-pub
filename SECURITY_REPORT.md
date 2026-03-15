@@ -23,7 +23,7 @@
 
 ## Critical
 
-### C-1 — TOTP Code Not Rate-Limited at Login
+### C-1 — TOTP Code Not Rate-Limited at Login ✓ FIXED
 **File:** `backend/app/routers/auth_router.py:96` | `backend/main.py:18`
 
 The `/api/auth/login` path prefix is rate-limited to 10 requests per 60 seconds. However, the same endpoint accepts a `totp_code` field and verifies it in-band. An attacker who already has a victim's password can send 10 login attempts per minute with different 6-digit TOTP codes. A TOTP code is valid for 90 seconds (`valid_window=1`, three 30-second windows). Over that window the attacker can try 15 combinations before the window rolls. At 1 000 000 possible codes and a cycling 90-second validity window, this is low-probability but exploitable over hours with no lockout mechanism.
@@ -32,7 +32,7 @@ The `/api/auth/login` path prefix is rate-limited to 10 requests per 60 seconds.
 
 ---
 
-### C-2 — TOTP Secrets Stored in Plaintext
+### C-2 — TOTP Secrets Stored in Plaintext ✓ FIXED
 **File:** `backend/app/migrations/014_two_factor_auth.sql:27` | `auth_router.py:176-178`
 
 The `totp_secret` column in `org_users` stores raw Base32 TOTP seeds. Linode API tokens are encrypted with Fernet (`crypto.py`) before being written to the database; TOTP secrets receive no equivalent protection. If the database is compromised or a backup is leaked, an attacker can derive valid TOTP codes for every user who has 2FA enabled, negating the second factor entirely.
@@ -41,7 +41,7 @@ The `totp_secret` column in `org_users` stores raw Base32 TOTP seeds. Linode API
 
 ---
 
-### C-3 — JWT Token Stored in `localStorage` (XSS-Accessible)
+### C-3 — JWT Token Stored in `localStorage` (XSS-Accessible) ✓ FIXED
 **File:** `src/api/client.ts:9,14`
 
 The bearer token is read from and written to `localStorage`. Any successful XSS attack — even via a third-party dependency — can exfiltrate the token silently. The token is then usable by an attacker from any machine for the remainder of its lifetime (up to `JWT_EXPIRE_MINUTES`, default 60 minutes).

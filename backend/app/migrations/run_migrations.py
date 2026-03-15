@@ -42,9 +42,37 @@ def run():
         cur.execute("INSERT INTO schema_migrations (filename) VALUES (%s)", (sql_file.name,))
         print(f"  Done.")
 
+    _encrypt_plaintext_totp_secrets(conn)
+
     cur.close()
     conn.close()
     print("All migrations complete.")
+
+
+def _encrypt_plaintext_totp_secrets(conn) -> None:
+    from app.services.crypto import encrypt_token
+    from cryptography.fernet import Fernet
+    fernet = Fernet(settings.TOKEN_ENCRYPTION_KEY.encode())
+
+    cur = conn.cursor()
+    cur.execute("SELECT id, totp_secret FROM org_users WHERE totp_secret IS NOT NULL")
+    rows = cur.fetchall()
+    encrypted_count = 0
+    for row in rows:
+        user_id, secret = row[0], row[1]
+        try:
+            fernet.decrypt(secret.encode())
+        except Exception:
+            encrypted = encrypt_token(secret)
+            cur.execute(
+                "UPDATE org_users SET totp_secret = %s WHERE id = %s",
+                (encrypted, user_id),
+            )
+            encrypted_count += 1
+    conn.commit()
+    if encrypted_count:
+        print(f"Encrypted {encrypted_count} plaintext TOTP secret(s).")
+    cur.close()
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 import io
 import base64
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse
@@ -9,7 +9,7 @@ from typing import Optional
 from app.database import get_db
 from app.auth import (
     hash_password, verify_password, create_token, decode_token,
-    get_current_user, validate_password, revoke_token,
+    get_current_user, validate_password, revoke_token, AUTH_COOKIE_NAME,
 )
 from app.config import settings
 from jwt.exceptions import InvalidTokenError
@@ -17,9 +17,75 @@ import pyotp
 import qrcode
 import qrcode.image.svg
 
+_TOTP_MAX_FAILURES = 5
+_TOTP_LOCKOUT_MINUTES = 15
+
+
+def _check_totp_lockout(cur, user_id: str) -> None:
+    cur.execute(
+        "SELECT totp_fail_count, totp_locked_until FROM org_users WHERE id = %s",
+        (user_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return
+    locked_until = row["totp_locked_until"]
+    if locked_until:
+        if locked_until.tzinfo is None:
+            locked_until = locked_until.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) < locked_until:
+            remaining = int((locked_until - datetime.now(timezone.utc)).total_seconds() / 60) + 1
+            raise HTTPException(
+                status_code=429,
+                detail=f"Too many failed attempts. Try again in {remaining} minute(s).",
+            )
+
+
+def _record_totp_failure(cur, db, user_id: str) -> None:
+    cur.execute(
+        "SELECT totp_fail_count FROM org_users WHERE id = %s",
+        (user_id,),
+    )
+    row = cur.fetchone()
+    new_count = (row["totp_fail_count"] if row else 0) + 1
+    if new_count >= _TOTP_MAX_FAILURES:
+        locked_until = datetime.now(timezone.utc) + timedelta(minutes=_TOTP_LOCKOUT_MINUTES)
+        cur.execute(
+            "UPDATE org_users SET totp_fail_count = %s, totp_locked_until = %s WHERE id = %s",
+            (new_count, locked_until, user_id),
+        )
+    else:
+        cur.execute(
+            "UPDATE org_users SET totp_fail_count = %s WHERE id = %s",
+            (new_count, user_id),
+        )
+    db.commit()
+
+
+def _reset_totp_failures(cur, db, user_id: str) -> None:
+    cur.execute(
+        "UPDATE org_users SET totp_fail_count = 0, totp_locked_until = NULL WHERE id = %s",
+        (user_id,),
+    )
+    db.commit()
+
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 bearer_scheme = HTTPBearer(auto_error=False)
+
+_IS_SECURE = not settings.CORS_ORIGINS.startswith("http://localhost")
+
+
+def _set_auth_cookie(response: JSONResponse, token: str) -> None:
+    response.set_cookie(
+        key=AUTH_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=_IS_SECURE,
+        samesite="strict",
+        max_age=settings.JWT_EXPIRE_MINUTES * 60,
+        path="/",
+    )
 
 
 class LoginRequest(BaseModel):
@@ -67,8 +133,11 @@ def register(body: RegisterRequest, db=Depends(get_db)):
         (body.email.lower(), pw_hash, body.full_name),
     )
     user = dict(cur.fetchone())
+    db.commit()
     token = create_token(str(user["id"]), user["email"], user["role"])
-    return {"token": token, "user": user}
+    resp = JSONResponse(content={"token": token, "user": user})
+    _set_auth_cookie(resp, token)
+    return resp
 
 
 @router.post("/login")
@@ -92,12 +161,18 @@ def login(body: LoginRequest, db=Depends(get_db)):
                 status_code=202,
                 content={"requires_totp": True},
             )
-        totp = pyotp.TOTP(user["totp_secret"])
-        if not totp.verify(body.totp_code, valid_window=1):
+        user_id = str(user["id"])
+        _check_totp_lockout(cur, user_id)
+        from app.services.crypto import decrypt_token as _dec
+        totp_secret = _dec(user["totp_secret"]) if user["totp_secret"] else None
+        totp = pyotp.TOTP(totp_secret)
+        if not totp.verify(body.totp_code, valid_window=0):
+            _record_totp_failure(cur, db, user_id)
             raise HTTPException(status_code=401, detail="Invalid authenticator code")
+        _reset_totp_failures(cur, db, user_id)
 
     token = create_token(str(user["id"]), user["email"], user["role"])
-    return {
+    payload = {
         "token": token,
         "user": {
             "id": str(user["id"]),
@@ -108,25 +183,31 @@ def login(body: LoginRequest, db=Depends(get_db)):
             "can_view_compliance": user["can_view_compliance"],
         },
     }
+    resp = JSONResponse(content=payload)
+    _set_auth_cookie(resp, token)
+    return resp
 
 
 @router.post("/logout")
 def logout(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
     db=Depends(get_db),
 ):
-    if not credentials:
-        return {"logged_out": True}
-    try:
-        payload = decode_token(credentials.credentials)
-        jti = payload.get("jti")
-        exp = payload.get("exp")
-        if jti and exp:
-            expires_at = datetime.fromtimestamp(exp, tz=timezone.utc)
-            revoke_token(jti, expires_at, db)
-    except InvalidTokenError:
-        pass
-    return {"logged_out": True}
+    raw_token = credentials.credentials if credentials else request.cookies.get(AUTH_COOKIE_NAME)
+    if raw_token:
+        try:
+            payload = decode_token(raw_token)
+            jti = payload.get("jti")
+            exp = payload.get("exp")
+            if jti and exp:
+                expires_at = datetime.fromtimestamp(exp, tz=timezone.utc)
+                revoke_token(jti, expires_at, db)
+        except InvalidTokenError:
+            pass
+    resp = JSONResponse(content={"logged_out": True})
+    resp.delete_cookie(key=AUTH_COOKIE_NAME, path="/")
+    return resp
 
 
 @router.get("/me")
@@ -170,11 +251,13 @@ def change_password(
 
 @router.post("/2fa/setup")
 def setup_2fa(current_user=Depends(get_current_user), db=Depends(get_db)):
+    from app.services.crypto import encrypt_token as _enc
     secret = pyotp.random_base32()
+    encrypted_secret = _enc(secret)
     cur = db.cursor()
     cur.execute(
         "UPDATE org_users SET totp_secret = %s, totp_enabled = FALSE WHERE id = %s",
-        (secret, str(current_user["id"])),
+        (encrypted_secret, str(current_user["id"])),
     )
     db.commit()
 
@@ -201,19 +284,24 @@ class TotpVerifyRequest(BaseModel):
 
 @router.post("/2fa/enable")
 def enable_2fa(body: TotpVerifyRequest, current_user=Depends(get_current_user), db=Depends(get_db)):
+    from app.services.crypto import decrypt_token as _dec
+    user_id = str(current_user["id"])
     cur = db.cursor()
-    cur.execute("SELECT totp_secret FROM org_users WHERE id = %s", (str(current_user["id"]),))
+    _check_totp_lockout(cur, user_id)
+    cur.execute("SELECT totp_secret FROM org_users WHERE id = %s", (user_id,))
     row = cur.fetchone()
     if not row or not row["totp_secret"]:
         raise HTTPException(status_code=400, detail="2FA setup not started. Call /2fa/setup first.")
 
-    totp = pyotp.TOTP(row["totp_secret"])
-    if not totp.verify(body.code, valid_window=1):
+    totp = pyotp.TOTP(_dec(row["totp_secret"]))
+    if not totp.verify(body.code, valid_window=0):
+        _record_totp_failure(cur, db, user_id)
         raise HTTPException(status_code=400, detail="Invalid authenticator code. Please try again.")
 
+    _reset_totp_failures(cur, db, user_id)
     cur.execute(
         "UPDATE org_users SET totp_enabled = TRUE WHERE id = %s",
-        (str(current_user["id"]),),
+        (user_id,),
     )
     db.commit()
     return {"enabled": True}
@@ -221,19 +309,24 @@ def enable_2fa(body: TotpVerifyRequest, current_user=Depends(get_current_user), 
 
 @router.post("/2fa/disable")
 def disable_2fa(body: TotpVerifyRequest, current_user=Depends(get_current_user), db=Depends(get_db)):
+    from app.services.crypto import decrypt_token as _dec
+    user_id = str(current_user["id"])
     cur = db.cursor()
-    cur.execute("SELECT totp_secret, totp_enabled FROM org_users WHERE id = %s", (str(current_user["id"]),))
+    _check_totp_lockout(cur, user_id)
+    cur.execute("SELECT totp_secret, totp_enabled FROM org_users WHERE id = %s", (user_id,))
     row = cur.fetchone()
     if not row or not row["totp_enabled"]:
         raise HTTPException(status_code=400, detail="2FA is not enabled.")
 
-    totp = pyotp.TOTP(row["totp_secret"])
-    if not totp.verify(body.code, valid_window=1):
+    totp = pyotp.TOTP(_dec(row["totp_secret"]))
+    if not totp.verify(body.code, valid_window=0):
+        _record_totp_failure(cur, db, user_id)
         raise HTTPException(status_code=400, detail="Invalid authenticator code.")
 
+    _reset_totp_failures(cur, db, user_id)
     cur.execute(
         "UPDATE org_users SET totp_secret = NULL, totp_enabled = FALSE WHERE id = %s",
-        (str(current_user["id"]),),
+        (user_id,),
     )
     db.commit()
     return {"disabled": True}

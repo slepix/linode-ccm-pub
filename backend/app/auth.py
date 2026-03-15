@@ -5,11 +5,13 @@ import random
 import jwt
 from jwt.exceptions import InvalidTokenError
 import bcrypt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.config import settings
 from app.database import get_db
 import psycopg2.extras
+
+AUTH_COOKIE_NAME = "auth_token"
 
 _PRUNE_PROBABILITY = 0.02
 
@@ -76,13 +78,20 @@ def decode_token(token: str) -> dict:
 
 
 def get_current_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
     db=Depends(get_db),
 ):
-    if not credentials:
+    raw_token: Optional[str] = None
+    if credentials:
+        raw_token = credentials.credentials
+    else:
+        raw_token = request.cookies.get(AUTH_COOKIE_NAME)
+
+    if not raw_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     try:
-        payload = decode_token(credentials.credentials)
+        payload = decode_token(raw_token)
         user_id = payload.get("sub")
         jti = payload.get("jti")
     except InvalidTokenError:

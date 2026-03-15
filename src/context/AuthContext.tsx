@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, authApi } from '../api/auth';
-import { setToken, getToken } from '../api/client';
+import { setToken } from '../api/client';
 
 interface AuthContextType {
   user: User | null;
@@ -17,14 +17,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = getToken();
-    if (!token) {
-      setLoading(false);
-      return;
-    }
     authApi.me()
-      .then((user) => setUser(user))
-      .catch(() => setToken(null))
+      .then((u) => setUser(u))
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
@@ -33,15 +28,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (result.requires_totp) {
       return { requiresTotp: true };
     }
-    setToken(result.token!);
+    if (result.token) setToken(result.token);
     setUser(result.user!);
     return { requiresTotp: false };
   };
 
   const register = async (email: string, password: string, full_name: string) => {
-    const { token, user } = await authApi.register(email, password, full_name);
-    setToken(token);
-    setUser(user);
+    const { token, user: u } = await authApi.register(email, password, full_name);
+    if (token) setToken(token);
+    setUser(u);
   };
 
   const logout = async () => {
