@@ -513,40 +513,34 @@ interface BulkAckBarProps {
 function BulkAckBar({ selectedIds, onConfirm, onCancel }: BulkAckBarProps) {
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showNote, setShowNote] = useState(false);
 
   const handleConfirm = async () => {
+    if (!note.trim()) return;
     setLoading(true);
     try {
-      await onConfirm(note);
+      await onConfirm(note.trim());
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="border-t border-lncyan2/30 bg-lncyan2/5 px-4 py-3">
+    <div className="border-t border-lngreen/20 bg-lngreen/5 px-4 py-3 space-y-2">
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-2">
-          <CheckSquare className="w-4 h-4 text-lncyan2" />
+          <ShieldCheck className="w-4 h-4 text-lngreen" />
           <span className="text-sm font-medium text-lntext">
-            {selectedIds.length} item{selectedIds.length !== 1 ? 's' : ''} selected
+            Mark {selectedIds.length} item{selectedIds.length !== 1 ? 's' : ''} as resolved
           </span>
         </div>
         <div className="flex items-center gap-2 ml-auto">
           <button
-            onClick={() => setShowNote(v => !v)}
-            className="text-xs px-3 py-1.5 rounded border border-lnborder text-lnmuted hover:text-lntext hover:border-lnborder2 transition"
-          >
-            {showNote ? 'Hide note' : 'Add note'}
-          </button>
-          <button
             onClick={handleConfirm}
-            disabled={loading}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded bg-lngreen hover:bg-lngreen/80 text-white transition disabled:opacity-50"
+            disabled={loading || !note.trim()}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded bg-lngreen hover:bg-lngreen/80 text-white transition disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-            Acknowledge {selectedIds.length}
+            {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
+            Confirm Resolution
           </button>
           <button
             onClick={onCancel}
@@ -556,18 +550,20 @@ function BulkAckBar({ selectedIds, onConfirm, onCancel }: BulkAckBarProps) {
           </button>
         </div>
       </div>
-      {showNote && (
-        <div className="mt-2">
-          <input
-            type="text"
-            value={note}
-            onChange={e => setNote(e.target.value)}
-            placeholder="Acknowledgment note (optional)..."
-            className="w-full bg-lncard border border-lnborder rounded px-3 py-1.5 text-sm text-lntext placeholder-lnfaint focus:outline-none focus:border-lncyan2"
-            autoFocus
-          />
-        </div>
-      )}
+      <div>
+        <input
+          type="text"
+          value={note}
+          onChange={e => setNote(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleConfirm()}
+          placeholder="Resolution note (required)..."
+          className="w-full bg-lncard border border-lnborder rounded px-3 py-1.5 text-sm text-lntext placeholder-lnfaint focus:outline-none focus:border-lngreen"
+          autoFocus
+        />
+        {note.trim() === '' && (
+          <p className="mt-1 text-xs text-lnfaint">A note is required to mark findings as resolved.</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -672,12 +668,12 @@ function RuleGroupRow({ group, onUpdated, isAuditor }: { group: RuleGroup; onUpd
               onClick={handleToggleSelectMode}
               className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded border transition cursor-pointer ${
                 selectMode
-                  ? 'border-lncyan2/60 text-lncyan2 bg-lncyan2/10'
+                  ? 'border-lngreen/60 text-lngreen bg-lngreen/10'
                   : 'border-lnborder text-lnfaint hover:text-lnmuted hover:border-lnborder2'
               }`}
             >
-              <CheckSquare className="w-3 h-3" />
-              {selectMode ? 'Cancel' : 'Select'}
+              <ShieldCheck className="w-3 h-3" />
+              {selectMode ? 'Cancel' : 'Resolve'}
             </div>
           )}
           {open ? <ChevronUp className="w-4 h-4 text-lnfaint" /> : <ChevronDown className="w-4 h-4 text-lnfaint" />}
