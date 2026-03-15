@@ -50,7 +50,7 @@ export default function AccountComparisons({ accounts, currentAccountId }: Props
   });
 
   const maxCritical = Math.max(...scores.map(s =>
-    s.score?.rule_breakdown.filter(r => r.severity === 'critical').reduce((sum, r) => sum + r.non_compliant, 0) ?? 0
+    (s.score?.rule_breakdown ?? []).filter(r => r.severity === 'critical').reduce((sum, r) => sum + r.non_compliant, 0)
   ), 1);
 
   return (
@@ -61,9 +61,9 @@ export default function AccountComparisons({ accounts, currentAccountId }: Props
         {sorted.map(({ account, score, loading }) => {
           const s = score?.compliance_score ?? null;
           const isCurrent = account.id === currentAccountId;
-          const criticalCount = score?.rule_breakdown
+          const criticalCount = (score?.rule_breakdown ?? [])
             .filter(r => r.severity === 'critical')
-            .reduce((sum, r) => sum + r.non_compliant, 0) ?? 0;
+            .reduce((sum, r) => sum + r.non_compliant, 0);
 
           return (
             <div
