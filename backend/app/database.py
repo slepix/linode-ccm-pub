@@ -13,7 +13,7 @@ def get_pool() -> ThreadedConnectionPool:
     if _pool is None:
         _pool = ThreadedConnectionPool(
             minconn=2,
-            maxconn=30,
+            maxconn=100,
             host=settings.DB_HOST,
             port=settings.DB_PORT,
             user=settings.DB_USER,
