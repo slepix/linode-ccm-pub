@@ -615,8 +615,8 @@ function ReportViewer({ report, onBack, onDelete }: ReportViewerProps) {
                                 <td className="px-4 py-2 text-lnfaint">{r.region ?? '—'}</td>
                                 <td className="px-4 py-2">
                                   <StatusBadge status={r.status} />
-                                  {r.acknowledged && (
-                                    <span className="ml-1.5 text-xs text-lnamber">(ack)</span>
+                                  {r.acknowledged && r.status === 'compliant' && (
+                                    <span className="ml-1.5 text-xs text-lnamber">(resolved)</span>
                                   )}
                                 </td>
                                 <td className="px-4 py-2 text-lnmuted max-w-xs truncate">{r.detail ?? '—'}</td>

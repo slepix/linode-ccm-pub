@@ -187,6 +187,10 @@ def _build_snapshot(account_id: str, period_start: datetime, period_end: datetim
     )
     results = [dict(r) for r in cur.fetchall()]
 
+    for r in results:
+        if r.get("acknowledged") and r.get("status") == "non_compliant":
+            r["status"] = "compliant"
+
     if not results:
         cur.execute(
             """
@@ -205,6 +209,10 @@ def _build_snapshot(account_id: str, period_start: datetime, period_end: datetim
             (account_id,),
         )
         results = [dict(r) for r in cur.fetchall()]
+
+        for r in results:
+            if r.get("acknowledged") and r.get("status") == "non_compliant":
+                r["status"] = "compliant"
 
     cur.execute(
         "SELECT * FROM compliance_score_history WHERE account_id = %s ORDER BY evaluated_at DESC LIMIT 1",
