@@ -216,8 +216,8 @@ def _write_to_db(account_id: str, data: dict, db, log: list, now: datetime) -> t
     for fw in data["firewalls_raw"]:
         rules = data["fw_rules_map"].get(fw["id"], {})
         entities = data["fw_entities_map"].get(fw["id"], [])
-        inbound_rules = rules.get("inbound", [])
-        outbound_rules = rules.get("outbound", [])
+        inbound_rules = rules.get("inbound") or []
+        outbound_rules = rules.get("outbound") or []
         specs = {
             "inbound_policy": rules.get("inbound_policy", "DROP"),
             "outbound_policy": rules.get("outbound_policy", "ACCEPT"),
