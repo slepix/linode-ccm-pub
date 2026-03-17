@@ -22,7 +22,7 @@ _MIGRATION_GUARD_TABLES = {
     "004_unique_builtin_rules.sql": "compliance_rules",
     "005_account_rule_configs.sql": "account_rule_configs",
     "006_new_compliance_rules.sql": "compliance_rules",
-    "007_reports.sql": "compliance_reports",
+    "007_reports.sql": "reports",
     "008_seventeen_new_rules.sql": "compliance_rules",
     "009_new_security_profiles.sql": "compliance_profiles",
     "010_security_schema_fixes.sql": "compliance_results",
