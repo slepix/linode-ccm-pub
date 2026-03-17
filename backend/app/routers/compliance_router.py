@@ -318,38 +318,53 @@ def get_resource_timeline(
 
     cur.execute("""
         SELECT
-            DATE_TRUNC('hour', cr.evaluated_at) AS snapshot_time,
-            COUNT(*) FILTER (WHERE cr.status = 'compliant') AS compliant,
-            COUNT(*) FILTER (WHERE cr.status = 'non_compliant') AS non_compliant,
-            COUNT(*) FILTER (WHERE cr.status = 'not_applicable') AS not_applicable,
+            rch.evaluated_at AS snapshot_time,
+            COUNT(*) FILTER (WHERE r->>'status' = 'compliant') AS compliant,
+            COUNT(*) FILTER (WHERE r->>'status' = 'non_compliant') AS non_compliant,
+            COUNT(*) FILTER (WHERE r->>'status' = 'not_applicable') AS not_applicable,
             COUNT(*) AS total,
             ROUND(
-                COUNT(*) FILTER (WHERE cr.status = 'compliant') * 100.0 /
-                NULLIF(COUNT(*) FILTER (WHERE cr.status IN ('compliant','non_compliant')), 0),
+                COUNT(*) FILTER (WHERE r->>'status' = 'compliant') * 100.0 /
+                NULLIF(COUNT(*) FILTER (WHERE r->>'status' IN ('compliant','non_compliant')), 0),
                 1
             ) AS compliance_score
-        FROM compliance_results cr
-        WHERE cr.resource_id = %s AND cr.account_id = %s
-        GROUP BY DATE_TRUNC('hour', cr.evaluated_at)
+        FROM resource_compliance_history rch,
+             jsonb_array_elements(rch.results) AS r
+        WHERE rch.resource_id = %s AND rch.account_id = %s
+        GROUP BY rch.evaluated_at
         ORDER BY snapshot_time ASC
     """, (resource_id, account_id))
     snapshots = [dict(r) for r in cur.fetchall()]
 
+    for s in snapshots:
+        if hasattr(s.get('snapshot_time'), 'isoformat'):
+            s['snapshot_time'] = s['snapshot_time'].isoformat()
+        s['compliant'] = int(s['compliant'])
+        s['non_compliant'] = int(s['non_compliant'])
+        s['not_applicable'] = int(s['not_applicable'])
+        s['total'] = int(s['total'])
+        if s['compliance_score'] is not None:
+            s['compliance_score'] = float(s['compliance_score'])
+
     cur.execute("""
         SELECT
-            cr.rule_id,
-            rule.name as rule_name,
-            rule.severity,
-            rule.resource_types,
-            DATE_TRUNC('hour', cr.evaluated_at) AS snapshot_time,
-            cr.status,
-            cr.detail
-        FROM compliance_results cr
-        JOIN compliance_rules rule ON rule.id = cr.rule_id
-        WHERE cr.resource_id = %s AND cr.account_id = %s
-        ORDER BY snapshot_time ASC, rule.severity, rule.name
+            r->>'rule_id' AS rule_id,
+            r->>'rule_name' AS rule_name,
+            r->>'severity' AS severity,
+            rch.evaluated_at AS snapshot_time,
+            r->>'status' AS status,
+            r->>'detail' AS detail
+        FROM resource_compliance_history rch,
+             jsonb_array_elements(rch.results) AS r
+        WHERE rch.resource_id = %s AND rch.account_id = %s
+        ORDER BY rch.evaluated_at ASC, r->>'severity', r->>'rule_name'
     """, (resource_id, account_id))
-    rule_history = [dict(r) for r in cur.fetchall()]
+    rule_history = []
+    for r in cur.fetchall():
+        row = dict(r)
+        if hasattr(row.get('snapshot_time'), 'isoformat'):
+            row['snapshot_time'] = row['snapshot_time'].isoformat()
+        rule_history.append(row)
 
     return {"snapshots": snapshots, "rule_history": rule_history}
 
