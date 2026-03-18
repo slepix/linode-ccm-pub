@@ -22,6 +22,7 @@ import UsersPage from './pages/UsersPage';
 import RulesPage from './pages/RulesPage';
 import ComplianceSettingsPage from './pages/ComplianceSettingsPage';
 import ReportsPage from './pages/ReportsPage';
+import McpPage from './pages/McpPage';
 import OnboardingWizard from './components/OnboardingWizard';
 import { accountsApi, LinodeAccount } from './api/accounts';
 import SyncProgressPanel from './components/SyncProgressPanel';
@@ -120,6 +121,7 @@ function AppShell() {
               <Route path="/accounts" element={<AccountsPage accounts={accounts} onChanged={loadAccounts} />} />
               <Route path="/users" element={<UsersPage />} />
               <Route path="/compliance-settings" element={<ComplianceSettingsPage account={selectedAccount} />} />
+              <Route path="/mcp" element={<McpPage />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           )}

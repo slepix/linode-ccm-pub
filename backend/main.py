@@ -7,6 +7,7 @@ from app.routers import (
     compliance_router, refresh_router, users_router, events_router, admin_router,
     reports_router
 )
+from app.routers import mcp_keys_router, mcp_server_router
 import time
 import threading
 from collections import defaultdict
@@ -25,6 +26,7 @@ _RATE_LIMIT_PATHS = {
     "/api/resources": (60, 60),
     "/api/events": (60, 60),
     "/api/reports": (30, 60),
+    "/api/mcp": (120, 60),
 }
 
 _GLOBAL_RATE_LIMIT = (120, 60)
@@ -109,6 +111,8 @@ app.include_router(users_router.router)
 app.include_router(events_router.router)
 app.include_router(admin_router.router)
 app.include_router(reports_router.router)
+app.include_router(mcp_keys_router.router)
+app.include_router(mcp_server_router.router)
 
 
 @app.get("/health")

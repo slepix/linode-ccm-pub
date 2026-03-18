@@ -2,7 +2,7 @@ import React from 'react';
 import {
   Shield, LayoutDashboard, Server, ClipboardList,
   Users, ChevronDown, LogOut, Settings, Activity, ShieldCheck,
-  Database, RefreshCw, CheckCircle, AlertCircle, FileText, Clock,
+  Database, RefreshCw, CheckCircle, AlertCircle, FileText, Clock, Terminal,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { runMigrations, getSyncSchedule, updateSyncSchedule } from '../api/admin';
@@ -55,6 +55,14 @@ export default function Sidebar({ currentView, onNavigate }: SidebarProps) {
     items: [
       { id: 'accounts', label: 'Linode Accounts', icon: Settings },
       { id: 'users', label: 'Users', icon: Users },
+      { id: 'mcp', label: 'MCP Integration', icon: Terminal },
+    ],
+  };
+
+  const mcpGroup = {
+    label: 'Integrations',
+    items: [
+      { id: 'mcp', label: 'MCP Integration', icon: Terminal },
     ],
   };
 
@@ -156,6 +164,31 @@ export default function Sidebar({ currentView, onNavigate }: SidebarProps) {
               {powerUserGroup.label}
             </div>
             {powerUserGroup.items.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => onNavigate(id)}
+                className={`w-full flex items-center gap-2.5 px-4 py-2 text-sm transition-colors relative ${
+                  currentView === id
+                    ? 'text-lncyan2 bg-lncyan2/10'
+                    : 'text-lnmuted hover:text-lntext hover:bg-ln-hover'
+                }`}
+              >
+                {currentView === id && (
+                  <span className="absolute left-0 top-0 bottom-0 w-0.5 bg-lncyan2 rounded-r" />
+                )}
+                <Icon className="w-4 h-4 shrink-0" />
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {user?.role !== 'admin' && (
+          <div className="mb-1">
+            <div className="px-4 pt-2 pb-1 text-[10px] font-bold text-lnfaint uppercase tracking-widest">
+              {mcpGroup.label}
+            </div>
+            {mcpGroup.items.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 onClick={() => onNavigate(id)}
