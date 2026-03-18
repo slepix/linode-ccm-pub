@@ -8,7 +8,7 @@ vm_root_password = "ChangeMe!SuperStr0ng#Password"
 
 # Git repository to clone onto the VM — must be publicly accessible or use
 # a deploy key. Example: https://github.com/your-org/your-repo.git
-git_repo_url = "https://github.com/YOUR_ORG/YOUR_REPO.git"
+git_repo_url = "https://github.com/slepix/linode-ccm-pub.git"
 
 # ─── Recommended ─────────────────────────────────────────────────────────────
 
