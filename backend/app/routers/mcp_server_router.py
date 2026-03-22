@@ -24,10 +24,24 @@ router = APIRouter(prefix="/api/mcp", tags=["mcp"])
 _PROTOCOL_VERSION = "2024-11-05"
 _SERVER_INFO = {"name": "Akamai CCM MCP", "version": "1.0.0"}
 
+_ACCOUNT_REF_PROPS = {
+    "account_id": {
+        "type": "string",
+        "description": "UUID of the Linode account. Use this OR account_name.",
+    },
+    "account_name": {
+        "type": "string",
+        "description": "Human-readable name of the account (e.g. 'production', 'staging'). Case-insensitive, partial match accepted. Use this OR account_id.",
+    },
+}
+
 _TOOLS = [
     {
         "name": "list_accounts",
-        "description": "List all Linode cloud accounts managed by this CCM instance.",
+        "description": (
+            "List all Linode cloud accounts managed by this CCM instance. "
+            "Returns each account's id and name. Call this first if you need to look up an account by name."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {},
@@ -36,25 +50,26 @@ _TOOLS = [
     },
     {
         "name": "get_compliance_score",
-        "description": "Get the current compliance score and summary for a specific Linode account.",
+        "description": (
+            "Get the current compliance score and summary for a Linode account. "
+            "Provide either account_id (UUID) or account_name (human-readable name such as 'production')."
+        ),
         "inputSchema": {
             "type": "object",
-            "properties": {
-                "account_id": {
-                    "type": "string",
-                    "description": "UUID of the Linode account.",
-                }
-            },
-            "required": ["account_id"],
+            "properties": _ACCOUNT_REF_PROPS,
+            "required": [],
         },
     },
     {
         "name": "list_compliance_results",
-        "description": "List compliance check results for a Linode account, optionally filtered by status or severity.",
+        "description": (
+            "List compliance check results for a Linode account, optionally filtered by status or severity. "
+            "Provide either account_id (UUID) or account_name (e.g. 'production')."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "account_id": {"type": "string", "description": "UUID of the Linode account."},
+                **_ACCOUNT_REF_PROPS,
                 "status": {
                     "type": "string",
                     "enum": ["compliant", "non_compliant", "not_applicable"],
@@ -71,23 +86,26 @@ _TOOLS = [
                     "default": 50,
                 },
             },
-            "required": ["account_id"],
+            "required": [],
         },
     },
     {
         "name": "list_resources",
-        "description": "List cloud resources (Linodes, NodeBalancers, Volumes, etc.) for an account.",
+        "description": (
+            "List cloud resources (Linodes, NodeBalancers, Volumes, etc.) for an account. "
+            "Provide either account_id (UUID) or account_name (e.g. 'production')."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "account_id": {"type": "string", "description": "UUID of the Linode account."},
+                **_ACCOUNT_REF_PROPS,
                 "resource_type": {
                     "type": "string",
                     "description": "Filter by resource type (e.g. linode, nodebalancer, volume).",
                 },
                 "region": {"type": "string", "description": "Filter by region slug."},
             },
-            "required": ["account_id"],
+            "required": [],
         },
     },
     {
@@ -103,30 +121,34 @@ _TOOLS = [
     },
     {
         "name": "list_events",
-        "description": "List recent Linode cloud events (audit log) for an account.",
+        "description": (
+            "List recent Linode cloud events (audit log) for an account. "
+            "Provide either account_id (UUID) or account_name (e.g. 'production')."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "account_id": {"type": "string", "description": "UUID of the Linode account."},
+                **_ACCOUNT_REF_PROPS,
                 "limit": {
                     "type": "integer",
                     "description": "Maximum events to return (default 50, max 200).",
                     "default": 50,
                 },
             },
-            "required": ["account_id"],
+            "required": [],
         },
     },
     {
         "name": "trigger_sync",
-        "description": "Trigger a manual sync and compliance evaluation for all accounts or a specific account.",
+        "description": (
+            "Trigger a manual sync and compliance evaluation for all accounts or a specific account. "
+            "Provide either account_id (UUID) or account_name (e.g. 'production'), or omit both to sync all. "
+            "Requires admin or power_user role."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "account_id": {
-                    "type": "string",
-                    "description": "UUID of a specific account to sync. If omitted, all accounts are synced.",
-                },
+                **_ACCOUNT_REF_PROPS,
                 "skip_eval": {
                     "type": "boolean",
                     "description": "Skip compliance evaluation after sync (default false).",
@@ -138,13 +160,14 @@ _TOOLS = [
     },
     {
         "name": "get_reports",
-        "description": "List compliance reports generated for an account.",
+        "description": (
+            "List compliance reports generated for an account. "
+            "Provide either account_id (UUID) or account_name (e.g. 'production')."
+        ),
         "inputSchema": {
             "type": "object",
-            "properties": {
-                "account_id": {"type": "string", "description": "UUID of the Linode account."},
-            },
-            "required": ["account_id"],
+            "properties": _ACCOUNT_REF_PROPS,
+            "required": [],
         },
     },
 ]
@@ -226,6 +249,74 @@ def _user_can_access_account(user: dict, account_id: str, db) -> bool:
     return cur.fetchone() is not None
 
 
+def _resolve_account_id(arguments: dict, user: dict, db) -> tuple[Optional[str], Optional[dict]]:
+    """
+    Resolve account_id from either 'account_id' or 'account_name' in arguments.
+    Returns (account_id, error_response). If error_response is not None, return it immediately.
+    """
+    account_id = arguments.get("account_id", "").strip()
+    account_name = arguments.get("account_name", "").strip()
+
+    if account_id:
+        if not _user_can_access_account(user, account_id, db):
+            return None, {"content": [{"type": "text", "text": "Access denied to this account."}], "isError": True}
+        return account_id, None
+
+    if account_name:
+        cur = db.cursor()
+        if user["role"] == "admin":
+            cur.execute(
+                "SELECT id, name FROM linode_accounts WHERE name ILIKE %s ORDER BY name LIMIT 5",
+                (f"%{account_name}%",),
+            )
+        else:
+            cur.execute("""
+                SELECT a.id, a.name FROM linode_accounts a
+                JOIN user_account_access uaa ON uaa.account_id = a.id
+                WHERE uaa.user_id = %s AND a.name ILIKE %s
+                ORDER BY a.name LIMIT 5
+            """, (str(user["id"]), f"%{account_name}%"))
+        matches = cur.fetchall()
+
+        if not matches:
+            accounts = _accessible_accounts(user, db)
+            names = ", ".join(f'"{a["name"]}"' for a in accounts) or "none"
+            return None, {
+                "content": [{
+                    "type": "text",
+                    "text": (
+                        f'No account found matching "{account_name}". '
+                        f"Available accounts: {names}. "
+                        "Please retry with the exact name or use account_id."
+                    ),
+                }],
+                "isError": True,
+            }
+
+        if len(matches) > 1:
+            names = ", ".join(f'"{r["name"]}"' for r in matches)
+            return None, {
+                "content": [{
+                    "type": "text",
+                    "text": (
+                        f'Multiple accounts match "{account_name}": {names}. '
+                        "Please be more specific or use account_id."
+                    ),
+                }],
+                "isError": True,
+            }
+
+        resolved_id = str(matches[0]["id"])
+        if not _user_can_access_account(user, resolved_id, db):
+            return None, {"content": [{"type": "text", "text": "Access denied to this account."}], "isError": True}
+        return resolved_id, None
+
+    return None, {
+        "content": [{"type": "text", "text": "Please provide either account_id or account_name."}],
+        "isError": True,
+    }
+
+
 def _accessible_accounts(user: dict, db) -> list:
     cur = db.cursor()
     if user["role"] == "admin":
@@ -258,9 +349,9 @@ def _handle_tool_call(name: str, arguments: dict, user: dict, db) -> dict:
             return {"content": [{"type": "text", "text": text}]}
 
         elif name == "get_compliance_score":
-            account_id = arguments.get("account_id", "")
-            if not _user_can_access_account(user, account_id, db):
-                return {"content": [{"type": "text", "text": "Access denied to this account."}], "isError": True}
+            account_id, err = _resolve_account_id(arguments, user, db)
+            if err:
+                return err
             cur = db.cursor()
             cur.execute("""
                 SELECT
@@ -288,9 +379,9 @@ def _handle_tool_call(name: str, arguments: dict, user: dict, db) -> dict:
             return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
 
         elif name == "list_compliance_results":
-            account_id = arguments.get("account_id", "")
-            if not _user_can_access_account(user, account_id, db):
-                return {"content": [{"type": "text", "text": "Access denied to this account."}], "isError": True}
+            account_id, err = _resolve_account_id(arguments, user, db)
+            if err:
+                return err
             status_filter = arguments.get("status")
             severity_filter = arguments.get("severity")
             limit = min(int(arguments.get("limit", 50)), 200)
@@ -325,9 +416,9 @@ def _handle_tool_call(name: str, arguments: dict, user: dict, db) -> dict:
             return {"content": [{"type": "text", "text": json.dumps(rows, indent=2, default=str)}]}
 
         elif name == "list_resources":
-            account_id = arguments.get("account_id", "")
-            if not _user_can_access_account(user, account_id, db):
-                return {"content": [{"type": "text", "text": "Access denied to this account."}], "isError": True}
+            account_id, err = _resolve_account_id(arguments, user, db)
+            if err:
+                return err
             cur = db.cursor()
             params = [account_id]
             extra = ""
@@ -373,9 +464,9 @@ def _handle_tool_call(name: str, arguments: dict, user: dict, db) -> dict:
             return {"content": [{"type": "text", "text": json.dumps(row, indent=2, default=str)}]}
 
         elif name == "list_events":
-            account_id = arguments.get("account_id", "")
-            if not _user_can_access_account(user, account_id, db):
-                return {"content": [{"type": "text", "text": "Access denied to this account."}], "isError": True}
+            account_id, err = _resolve_account_id(arguments, user, db)
+            if err:
+                return err
             limit = min(int(arguments.get("limit", 50)), 200)
             cur = db.cursor()
             cur.execute("""
@@ -399,7 +490,11 @@ def _handle_tool_call(name: str, arguments: dict, user: dict, db) -> dict:
             import os
             base = os.getenv("MCP_INTERNAL_BASE", "http://localhost:8000")
             skip_eval = arguments.get("skip_eval", False)
-            account_id = arguments.get("account_id")
+            account_id = None
+            if arguments.get("account_id") or arguments.get("account_name"):
+                account_id, err = _resolve_account_id(arguments, user, db)
+                if err:
+                    return err
             params = {"skip_eval": str(skip_eval).lower()}
             if account_id:
                 params["account_id"] = account_id
@@ -418,9 +513,9 @@ def _handle_tool_call(name: str, arguments: dict, user: dict, db) -> dict:
                 return {"content": [{"type": "text", "text": f"Failed to trigger sync: {exc}"}], "isError": True}
 
         elif name == "get_reports":
-            account_id = arguments.get("account_id", "")
-            if not _user_can_access_account(user, account_id, db):
-                return {"content": [{"type": "text", "text": "Access denied to this account."}], "isError": True}
+            account_id, err = _resolve_account_id(arguments, user, db)
+            if err:
+                return err
             cur = db.cursor()
             cur.execute("""
                 SELECT id, title, description, period_start, period_end, quarter, status, created_at
