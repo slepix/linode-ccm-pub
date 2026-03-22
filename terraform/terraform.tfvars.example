@@ -5,22 +5,15 @@
 
 linode_token     = "your-linode-pat-here"
 vm_root_password = "ChangeMe!SuperStr0ng#Password"
+
+# Git repository to clone onto the VM — must be publicly accessible or use
+# a deploy key. Example: https://github.com/your-org/your-repo.git
+git_repo_url = "https://github.com/slepix/linode-ccm-pub.git"
+
+# ─── Recommended ─────────────────────────────────────────────────────────────
+
 region    = "us-mia"
 env_label = "prod"
-
-# Set ssl_email to enable automatic HTTPS via Let's Encrypt during deployment.
-# ssl_domain: optional — if left empty, the server's Linode rDNS hostname
-#             (e.g., 1-2-3-4.ip.linodeusercontent.com) is used automatically.
-# ssl_email:  required to enable SSL — used for Let's Encrypt expiry notices.
-
-ssl_domain = ""                    # e.g., "lccm.example.com" (optional)
-ssl_email  = ""                    # e.g., "admin@example.com" (set to enable SSL)
-
-# CORS origins — leave empty to automatically use the VM's Linode rDNS hostname
-# (e.g. http://172-239-242-132.ip.linodeusercontent.com).
-# Only set this if you are pointing a custom domain at the VM.
-
-cors_origins = ""
 
 # Add your SSH public keys so you can log in without a password.
 vm_ssh_keys = [
@@ -31,12 +24,13 @@ vm_ssh_keys = [
 
 vm_type  = "g6-standard-2"   # 2 vCPU / 4 GB RAM — adjust as needed
 vm_image = "linode/ubuntu22.04"
-vm_tags = ["owner:ops", "environment:mgmt", "cost-center:platform", "app:compliancemanager"]
+
+vm_tags = ["owner:ops", "environment:prod", "cost-center:platform"]
 
 # ─── Managed PostgreSQL ───────────────────────────────────────────────────────
 
-db_type         = "g6-standard-2"   # smallest plan — use g6-standard-2 for production load
-db_engine       = "postgresql/18"
+db_type         = "g6-nanode-1"   # smallest plan — use g6-standard-2 for production load
+db_engine       = "postgresql/16"
 db_cluster_size = 1               # set to 3 for high-availability
 
 db_updates_day_of_week = 7        # Sunday
@@ -52,10 +46,8 @@ app_db_user = "appuser"
 
 jwt_secret           = ""
 refresh_api_secret   = ""
-token_encryption_key = ""   
+token_encryption_key = ""   # Fernet key — auto-generated if empty
 
-
-# NOT IMPLEMENTED YET - YOU WILL NEED TO REGISTER YOUR ACCOUNT ON THE LOGIN PAGE. 
 # ─── Initial admin account ────────────────────────────────────────────────────
 # Fill in both fields to have the first admin user created automatically on
 # first boot. Registration is disabled immediately afterward for security.
@@ -65,9 +57,24 @@ initial_admin_email    = "admin@example.com"
 initial_admin_password = "ChangeMe!Admin#Password"
 
 # ─── Application settings ─────────────────────────────────────────────────────
+
+# CORS origins — leave empty to automatically use the VM's Linode rDNS hostname
+# (e.g. http://172-239-242-132.ip.linodeusercontent.com). A single terraform
+# apply is all that is needed; no post-provisioning updates required.
+# Only set this if you are pointing a custom domain at the VM.
+cors_origins = ""
+
 jwt_expire_minutes  = 1440   # 24 hours
 trusted_proxy_count = 1      # set to 1 if behind a load balancer / reverse proxy
 
-# Git repository to clone onto the VM — must be publicly accessible or use
-# a deploy key. Example: https://github.com/your-org/your-repo.git
-git_repo_url = "https://github.com/slepix/linode-ccm-pub.git"
+# ─── SSL / TLS (Let's Encrypt) ────────────────────────────────────────────────
+# Set ssl_email to enable automatic HTTPS via Let's Encrypt during deployment.
+#
+# ssl_domain: optional — if left empty, the server's Linode rDNS hostname
+#             (e.g., 1-2-3-4.ip.linodeusercontent.com) is used automatically.
+#
+# ssl_email:  required to enable SSL — used for Let's Encrypt expiry notices.
+#             Leave empty to skip SSL setup entirely.
+
+ssl_domain = ""                    # e.g., "lccm.example.com" (optional)
+ssl_email  = ""                    # e.g., "admin@example.com" (set to enable SSL)
