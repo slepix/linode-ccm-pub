@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import json
 from app.database import get_db
 from app.auth import get_current_user
 
 router = APIRouter(prefix="/api/resources", tags=["resources"])
+
+GAP_MINUTES = 10
 
 
 def _user_can_access(user: dict, account_id: str, db) -> bool:
@@ -17,6 +19,60 @@ def _user_can_access(user: dict, account_id: str, db) -> bool:
         (str(user["id"]), account_id),
     )
     return cur.fetchone() is not None
+
+
+def _detect_sync_batches(account_id: str, cur) -> list[dict]:
+    """
+    Cluster all snapshot timestamps into sync batches.
+    A new batch starts when there is a gap > GAP_MINUTES between consecutive timestamps.
+    Returns list of {start, end, label_ts} sorted newest first.
+    """
+    cur.execute(
+        """
+        SELECT synced_at
+        FROM resource_snapshots
+        WHERE account_id = %s
+        ORDER BY synced_at ASC
+        """,
+        (account_id,),
+    )
+    rows = [r["synced_at"] for r in cur.fetchall()]
+    if not rows:
+        return []
+
+    batches = []
+    batch_start = rows[0]
+    batch_end = rows[0]
+
+    for ts in rows[1:]:
+        if ts - batch_end > timedelta(minutes=GAP_MINUTES):
+            batches.append({"start": batch_start, "end": batch_end})
+            batch_start = ts
+        batch_end = ts
+
+    batches.append({"start": batch_start, "end": batch_end})
+
+    batches.sort(key=lambda b: b["start"], reverse=True)
+    return batches
+
+
+def _fetch_batch_snapshots(account_id: str, batch: dict, cur) -> dict:
+    """
+    Fetch the most recent snapshot per (resource_id, resource_type) within a batch window.
+    """
+    cur.execute(
+        """
+        SELECT DISTINCT ON (resource_id, resource_type)
+            resource_id, resource_type, label, region, status, specs, synced_at
+        FROM resource_snapshots
+        WHERE account_id = %s
+          AND synced_at >= %s
+          AND synced_at <= %s
+        ORDER BY resource_id, resource_type, synced_at DESC
+        """,
+        (account_id, batch["start"], batch["end"]),
+    )
+    return {(r["resource_id"], r["resource_type"]): dict(r) for r in cur.fetchall()}
 
 
 @router.get("")
@@ -50,8 +106,8 @@ def list_resources(
 @router.get("/drift")
 def get_drift(
     account_id: str = Query(...),
-    sync_a: Optional[str] = Query(None, description="ISO timestamp of older sync"),
-    sync_b: Optional[str] = Query(None, description="ISO timestamp of newer sync"),
+    sync_a: Optional[str] = Query(None, description="ISO timestamp representing the older sync batch"),
+    sync_b: Optional[str] = Query(None, description="ISO timestamp representing the newer sync batch"),
     current_user=Depends(get_current_user),
     db=Depends(get_db),
 ):
@@ -59,58 +115,64 @@ def get_drift(
         raise HTTPException(status_code=403, detail="Access denied")
 
     cur = db.cursor()
+    batches = _detect_sync_batches(account_id, cur)
 
-    cur.execute(
-        """
-        SELECT DISTINCT synced_at
-        FROM resource_snapshots
-        WHERE account_id = %s
-        ORDER BY synced_at DESC
-        LIMIT 50
-        """,
-        (account_id,),
-    )
-    sync_times = [row["synced_at"] for row in cur.fetchall()]
+    if len(batches) < 2:
+        return {
+            "syncs": [str(b["start"]) for b in batches],
+            "changes": [],
+        }
 
-    if len(sync_times) < 2:
-        return {"syncs": [str(t) for t in sync_times], "changes": []}
+    sync_labels = [str(b["start"]) for b in batches]
 
     if sync_b is None:
-        ts_b = sync_times[0]
+        batch_b = batches[0]
     else:
         ts_b = datetime.fromisoformat(sync_b.replace("Z", "+00:00"))
+        if ts_b.tzinfo is None:
+            ts_b = ts_b.replace(tzinfo=timezone.utc)
+        batch_b = None
+        for b in batches:
+            b_start = b["start"]
+            if b_start.tzinfo is None:
+                b_start = b_start.replace(tzinfo=timezone.utc)
+            if abs((b_start - ts_b).total_seconds()) < GAP_MINUTES * 60:
+                batch_b = b
+                break
+        if batch_b is None:
+            batch_b = batches[0]
 
     if sync_a is None:
-        candidates = [t for t in sync_times if t < ts_b]
-        if not candidates:
-            return {"syncs": [str(t) for t in sync_times], "changes": []}
-        ts_a = candidates[0]
+        batch_a = None
+        for b in batches:
+            b_start = b["start"]
+            if b_start.tzinfo is None:
+                b_start = b_start.replace(tzinfo=timezone.utc)
+            bb_start = batch_b["start"]
+            if bb_start.tzinfo is None:
+                bb_start = bb_start.replace(tzinfo=timezone.utc)
+            if b_start < bb_start:
+                batch_a = b
+                break
+        if batch_a is None:
+            return {"syncs": sync_labels, "changes": []}
     else:
         ts_a = datetime.fromisoformat(sync_a.replace("Z", "+00:00"))
+        if ts_a.tzinfo is None:
+            ts_a = ts_a.replace(tzinfo=timezone.utc)
+        batch_a = None
+        for b in batches:
+            b_start = b["start"]
+            if b_start.tzinfo is None:
+                b_start = b_start.replace(tzinfo=timezone.utc)
+            if abs((b_start - ts_a).total_seconds()) < GAP_MINUTES * 60:
+                batch_a = b
+                break
+        if batch_a is None:
+            batch_a = batches[1]
 
-    cur.execute(
-        """
-        SELECT resource_id, resource_type, label, region, status, specs, synced_at
-        FROM resource_snapshots
-        WHERE account_id = %s
-          AND synced_at >= %s - interval '2 minutes'
-          AND synced_at <= %s + interval '2 minutes'
-        """,
-        (account_id, ts_a, ts_a),
-    )
-    snap_a = {(r["resource_id"], r["resource_type"]): dict(r) for r in cur.fetchall()}
-
-    cur.execute(
-        """
-        SELECT resource_id, resource_type, label, region, status, specs, synced_at
-        FROM resource_snapshots
-        WHERE account_id = %s
-          AND synced_at >= %s - interval '2 minutes'
-          AND synced_at <= %s + interval '2 minutes'
-        """,
-        (account_id, ts_b, ts_b),
-    )
-    snap_b = {(r["resource_id"], r["resource_type"]): dict(r) for r in cur.fetchall()}
+    snap_a = _fetch_batch_snapshots(account_id, batch_a, cur)
+    snap_b = _fetch_batch_snapshots(account_id, batch_b, cur)
 
     all_keys = set(snap_a.keys()) | set(snap_b.keys())
     changes = []
@@ -189,9 +251,9 @@ def get_drift(
     changes.sort(key=lambda x: (x["change_type"], x["resource_type"], x["label"]))
 
     return {
-        "sync_a": str(ts_a),
-        "sync_b": str(ts_b),
-        "syncs": [str(t) for t in sync_times],
+        "sync_a": str(batch_a["start"]),
+        "sync_b": str(batch_b["start"]),
+        "syncs": sync_labels,
         "changes": changes,
     }
 
