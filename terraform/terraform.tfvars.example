@@ -30,8 +30,6 @@ cors_origins = ""
 # Only set this if you are pointing a custom domain at the VM.
 
 
-
-
 # Add your SSH public keys so you can log in without a password.
 vm_ssh_keys = [
   # "ssh-ed25519 AAAAC3Nza... user@host",
