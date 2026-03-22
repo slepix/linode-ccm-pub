@@ -65,6 +65,7 @@ jwt_secret           = ""
 refresh_api_secret   = ""
 token_encryption_key = ""   
 
+
 # NOT IMPLEMENTED YET - YOU WILL NEED TO REGISTER YOUR ACCOUNT ON THE LOGIN PAGE. 
 # ─── Initial admin account ────────────────────────────────────────────────────
 # Fill in both fields to have the first admin user created automatically on
@@ -75,14 +76,8 @@ initial_admin_email    = "admin@example.com"
 initial_admin_password = "ChangeMe!Admin#Password"
 
 # ─── Application settings ─────────────────────────────────────────────────────
-
-
-
 jwt_expire_minutes  = 1440   # 24 hours
 trusted_proxy_count = 1      # set to 1 if behind a load balancer / reverse proxy
-
-
-
 
 # Git repository to clone onto the VM — must be publicly accessible or use
 # a deploy key. Example: https://github.com/your-org/your-repo.git
