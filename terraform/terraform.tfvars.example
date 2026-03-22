@@ -8,27 +8,20 @@ vm_root_password = "ChangeMe!SuperStr0ng#Password"
 region    = "us-mia"
 env_label = "prod"
 
+
+# Set ssl_email to enable automatic HTTPS via Let's Encrypt during deployment.
+# ssl_domain: optional — if left empty, the server's Linode rDNS hostname
+#             (e.g., 1-2-3-4.ip.linodeusercontent.com) is used automatically.
+# ssl_email:  required to enable SSL — used for Let's Encrypt expiry notices.
+
 ssl_domain = ""                    # e.g., "lccm.example.com" (optional)
 ssl_email  = ""                    # e.g., "admin@example.com" (set to enable SSL)
 
-cors_origins = ""
-
-# ─── SSL / TLS (Let's Encrypt) ────────────────────────────────────────────────
-# Set ssl_email to enable automatic HTTPS via Let's Encrypt during deployment.
-#
-# ssl_domain: optional — if left empty, the server's Linode rDNS hostname
-#             (e.g., 1-2-3-4.ip.linodeusercontent.com) is used automatically.
-#
-# ssl_email:  required to enable SSL — used for Let's Encrypt expiry notices.
-#             Leave empty to skip SSL setup entirely.
-# ─── Recommended ─────────────────────────────────────────────────────────────
-
-
 # CORS origins — leave empty to automatically use the VM's Linode rDNS hostname
-# (e.g. http://172-239-242-132.ip.linodeusercontent.com). A single terraform
-# apply is all that is needed; no post-provisioning updates required.
+# (e.g. http://172-239-242-132.ip.linodeusercontent.com).
 # Only set this if you are pointing a custom domain at the VM.
 
+cors_origins = ""
 
 # Add your SSH public keys so you can log in without a password.
 vm_ssh_keys = [
@@ -39,8 +32,7 @@ vm_ssh_keys = [
 
 vm_type  = "g6-standard-2"   # 2 vCPU / 4 GB RAM — adjust as needed
 vm_image = "linode/ubuntu22.04"
-
-vm_tags = ["owner:ops", "environment:prod", "cost-center:platform"]
+vm_tags = ["owner:ops", "environment:mgmt", "cost-center:platform", "app:compliancemanager"]
 
 # ─── Managed PostgreSQL ───────────────────────────────────────────────────────
 
