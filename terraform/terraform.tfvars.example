@@ -8,7 +8,6 @@ vm_root_password = "ChangeMe!SuperStr0ng#Password"
 region    = "us-mia"
 env_label = "prod"
 
-
 # Set ssl_email to enable automatic HTTPS via Let's Encrypt during deployment.
 # ssl_domain: optional — if left empty, the server's Linode rDNS hostname
 #             (e.g., 1-2-3-4.ip.linodeusercontent.com) is used automatically.
