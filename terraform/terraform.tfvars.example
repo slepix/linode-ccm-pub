@@ -63,7 +63,7 @@ app_db_user = "appuser"
 
 jwt_secret           = ""
 refresh_api_secret   = ""
-token_encryption_key = ""   # Fernet key — auto-generated if empty
+token_encryption_key = ""   
 
 # NOT IMPLEMENTED YET - YOU WILL NEED TO REGISTER YOUR ACCOUNT ON THE LOGIN PAGE. 
 # ─── Initial admin account ────────────────────────────────────────────────────
