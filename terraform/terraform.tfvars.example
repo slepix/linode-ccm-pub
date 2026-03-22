@@ -47,7 +47,7 @@ vm_tags = ["owner:ops", "environment:prod", "cost-center:platform"]
 # ─── Managed PostgreSQL ───────────────────────────────────────────────────────
 
 db_type         = "g6-standard-2"   # smallest plan — use g6-standard-2 for production load
-db_engine       = "postgresql/16"
+db_engine       = "postgresql/18"
 db_cluster_size = 1               # set to 3 for high-availability
 
 db_updates_day_of_week = 7        # Sunday
