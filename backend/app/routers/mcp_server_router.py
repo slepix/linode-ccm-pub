@@ -170,6 +170,28 @@ _TOOLS = [
             "required": [],
         },
     },
+    {
+        "name": "get_account_status",
+        "description": (
+            "Get the last sync time and last compliance check time for one or all accounts. "
+            "Useful for checking how fresh the data is. "
+            "Omit both account_id and account_name to get the status of all accessible accounts."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "account_id": {
+                    "type": "string",
+                    "description": "UUID of the account (optional). Omit to get all accounts.",
+                },
+                "account_name": {
+                    "type": "string",
+                    "description": "Name of the account (optional, e.g. 'production'). Omit to get all accounts.",
+                },
+            },
+            "required": [],
+        },
+    },
 ]
 
 
@@ -530,6 +552,41 @@ def _handle_tool_call(name: str, arguments: dict, user: dict, db) -> dict:
                     if r.get(f) and hasattr(r[f], "isoformat"):
                         r[f] = r[f].isoformat()
             return {"content": [{"type": "text", "text": json.dumps(rows, indent=2, default=str)}]}
+
+        elif name == "get_account_status":
+            wants_specific = arguments.get("account_id") or arguments.get("account_name")
+            if wants_specific:
+                account_id, err = _resolve_account_id(arguments, user, db)
+                if err:
+                    return err
+                cur = db.cursor()
+                cur.execute("""
+                    SELECT id, name, last_sync_at, last_evaluated_at
+                    FROM linode_accounts
+                    WHERE id = %s
+                """, (account_id,))
+                rows = [cur.fetchone()]
+            else:
+                rows = _accessible_accounts(user, db)
+                cur = None
+
+            results = []
+            for r in rows:
+                if r is None:
+                    continue
+                row = dict(r)
+                last_sync = row.get("last_sync_at")
+                last_eval = row.get("last_evaluated_at")
+                results.append({
+                    "account_id": str(row["id"]),
+                    "account_name": row["name"],
+                    "last_sync_at": last_sync.isoformat() if last_sync and hasattr(last_sync, "isoformat") else last_sync,
+                    "last_compliance_check_at": last_eval.isoformat() if last_eval and hasattr(last_eval, "isoformat") else last_eval,
+                    "sync_status": "never" if not last_sync else "ok",
+                    "compliance_check_status": "never" if not last_eval else "ok",
+                })
+
+            return {"content": [{"type": "text", "text": json.dumps(results if len(results) != 1 else results[0], indent=2, default=str)}]}
 
         else:
             return {
