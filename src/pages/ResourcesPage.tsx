@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Server, HardDrive, Database, Cloud, Shield, Network, Box, Loader2, ChevronDown, ChevronRight, Download, Clock, Globe } from 'lucide-react';
+import { Server, HardDrive, Database, Cloud, Shield, Network, Box, Loader2, ChevronDown, ChevronRight, Download, Clock, Globe, GitCompare } from 'lucide-react';
 import { LinodeAccount } from '../api/accounts';
 import { resourcesApi, Resource } from '../api/resources';
 import { complianceApi } from '../api/compliance';
 import ResourceSpecsView from '../components/ResourceSpecsView';
 import ResourceTimelineModal from '../components/ResourceTimelineModal';
+import DriftModal from '../components/DriftModal';
 import { exportResourcePdf } from '../utils/exportResourcePdf';
 import { exportResourceCsv, exportResourceXls, ComplianceResultWithNotes } from '../utils/exportResourceCsv';
 import { exportResourceOcsf } from '../utils/exportResourceOcsf';
@@ -132,6 +133,7 @@ export default function ResourcesPage({ account }: Props) {
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set());
   const [expandedResource, setExpandedResource] = useState<string | null>(null);
   const [timelineResource, setTimelineResource] = useState<Resource | null>(null);
+  const [showDrift, setShowDrift] = useState(false);
   useEffect(() => {
     if (!account) return;
     setLoading(true);
@@ -184,16 +186,25 @@ export default function ResourcesPage({ account }: Props) {
               {account.name} · {filtered.length} resource{filtered.length !== 1 ? 's' : ''} across {sortedTypes.length} type{sortedTypes.length !== 1 ? 's' : ''}
             </p>
           </div>
-          <select
-            value={filterRegion}
-            onChange={e => setFilterRegion(e.target.value)}
-            className="bg-lndark border border-lnborder rounded px-3 py-2 text-sm text-lntext focus:outline-none focus:border-lncyan2"
-          >
-            <option value="">All Regions</option>
-            {regions.map(r => (
-              <option key={r} value={r}>{r}</option>
-            ))}
-          </select>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowDrift(true)}
+              className="flex items-center gap-2 text-sm font-medium text-lnmuted hover:text-lntext border border-lnborder hover:border-lncyan2/50 bg-lndark hover:bg-lncard transition-all px-3 py-2 rounded"
+            >
+              <GitCompare className="w-4 h-4 text-lncyan2" />
+              Drift
+            </button>
+            <select
+              value={filterRegion}
+              onChange={e => setFilterRegion(e.target.value)}
+              className="bg-lndark border border-lnborder rounded px-3 py-2 text-sm text-lntext focus:outline-none focus:border-lncyan2"
+            >
+              <option value="">All Regions</option>
+              {regions.map(r => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {loading ? (
@@ -299,6 +310,12 @@ export default function ResourcesPage({ account }: Props) {
         resource={timelineResource}
         accountId={account.id}
         onClose={() => setTimelineResource(null)}
+      />
+    )}
+    {showDrift && account && (
+      <DriftModal
+        accountId={account.id}
+        onClose={() => setShowDrift(false)}
       />
     )}
     </>
