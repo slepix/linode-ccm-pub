@@ -9,10 +9,7 @@ A cloud compliance and security management platform for Linode (Akamai Cloud) in
 1. [Features](#features)
 2. [Architecture](#architecture)
 3. [Prerequisites](#prerequisites)
-4. [Deployment Options](#deployment-options)
-   - [Option A: Terraform (Recommended)](#option-a-terraform-recommended)
-   - [Option B: Docker Compose (Self-Managed Server)](#option-b-docker-compose-self-managed-server)
-   - [Option C: Manual / Local Development](#option-c-manual--local-development)
+4. [Deployment](#deployment)
 5. [Environment Variables Reference](#environment-variables-reference)
 6. [First Login & Initial Setup](#first-login--initial-setup)
 7. [SSL / TLS](#ssl--tls)
@@ -20,8 +17,7 @@ A cloud compliance and security management platform for Linode (Akamai Cloud) in
 9. [Automated Sync Scheduling](#automated-sync-scheduling)
 10. [User Roles & Access Control](#user-roles--access-control)
 11. [API Reference](#api-reference)
-12. [Nixpacks / PaaS Deployment](#nixpacks--paas-deployment)
-13. [Troubleshooting](#troubleshooting)
+12. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -62,7 +58,7 @@ A cloud compliance and security management platform for Linode (Akamai Cloud) in
                                                         ▼                        ▼
                                              ┌──────────────────┐    ┌───────────────────┐
                                              │  PostgreSQL DB   │    │   Linode API v4   │
-                                             │ (Managed or self)│    │ api.linode.com    │
+                                             │ (Akamai Managed) │    │ api.linode.com    │
                                              └──────────────────┘    └───────────────────┘
 ```
 
@@ -70,99 +66,107 @@ A cloud compliance and security management platform for Linode (Akamai Cloud) in
 
 **Backend** is a FastAPI application with JWT authentication, async PostgreSQL access via asyncpg, and a sync engine that polls the Linode API on demand or on a schedule.
 
-**Database** is PostgreSQL (Akamai Managed Database recommended for production).
+**Database** is a Akamai Managed PostgreSQL cluster, provisioned automatically by Terraform.
 
 ---
 
 ## Prerequisites
 
-| Tool | Version | Required For |
-|------|---------|--------------|
-| Docker + Docker Compose | 24+ | Option B |
-| Terraform | 1.5+ | Option A |
-| Python | 3.13 | Option C (backend) |
-| Node.js | 22+ | Option C (frontend) |
-| A Linode account | — | All |
-| A Linode Personal Access Token | — | All |
+| Tool | Version | Notes |
+|------|---------|-------|
+| Terraform | 1.5+ | Infrastructure provisioning |
+| A Linode / Akamai Cloud account | — | Required to deploy resources |
+| A Linode Personal Access Token | — | Full access required for Terraform |
 
-### Linode API Token Permissions
+### Linode API Token — Terraform
 
-When creating a Personal Access Token in the Linode Cloud Manager, grant **read-only** access to the following:
+Terraform requires a **read-write** token to create infrastructure resources (VMs, databases, VPCs, firewalls). Generate one in the Linode Cloud Manager under **My Profile → API Tokens** with full access.
 
-- Linodes
-- Volumes
-- Databases
-- Firewalls
-- VPCs
-- Kubernetes (LKE)
-- NodeBalancers
-- Object Storage
-- Events
+### Linode API Token — Application
 
-> You can use a read-write token, but LCCM only reads data — read-only is sufficient and more secure.
+Once LCCM is running, each Linode account you connect to the application only needs a **read-only** token covering:
+
+- Linodes, Volumes, Databases, Firewalls, VPCs, Kubernetes (LKE), NodeBalancers, Object Storage, Events
+
+> LCCM only reads infrastructure data — a read-only token is sufficient and more secure for day-to-day operation.
 
 ---
 
-## Deployment Options
+## Deployment
 
-### Option A: Terraform (Recommended)
+Terraform provisions everything on Akamai Cloud: a VPC, firewall, Ubuntu VM, and managed PostgreSQL cluster. The VM configures itself automatically via `user_data` — it installs Docker, clones the repository, runs database migrations, and starts the application.
 
-Terraform provisions everything on Akamai Cloud: a VPC, firewall, Ubuntu VM, and managed PostgreSQL cluster. The VM is configured automatically via `user_data` — it installs Docker, clones the repository, creates the database, and starts the application.
-
-#### 1. Install Terraform
+### 1. Install Terraform
 
 ```bash
 # macOS
 brew install terraform
 
-# Linux
-curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
-sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
-sudo apt-get update && sudo apt-get install terraform
+# Linux (Debian/Ubuntu)
+wget -O - https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+sudo apt update && sudo apt install terraform
 ```
 
-#### 2. Configure variables
+### 2. Configure variables
 
 ```bash
 cd terraform
 cp terraform.tfvars.example terraform.tfvars
 ```
 
-Edit `terraform.tfvars` with your values. Required fields are marked below — see the full [Environment Variables Reference](#environment-variables-reference) for details on each setting.
+Edit `terraform.tfvars`. The table below describes every available variable — required ones are marked.
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `linode_token` | Yes | — | Linode PAT for Terraform (read-write) |
+| `vm_root_password` | Yes | — | Root password for the application VM |
+| `git_repo_url` | Yes | — | Git URL of this repository |
+| `region` | No | `us-mia` | Akamai region to deploy into |
+| `env_label` | No | `prod` | Label prefix applied to all resources |
+| `vm_type` | No | `g6-standard-2` | VM plan (2 vCPU / 4 GB RAM) |
+| `vm_image` | No | `linode/ubuntu22.04` | VM OS image |
+| `vm_ssh_keys` | No | `[]` | List of SSH public keys for root login |
+| `vpc_subnet_cidr` | No | `10.0.1.0/24` | Private subnet CIDR |
+| `db_type` | No | `g6-nanode-1` | Managed DB plan |
+| `db_engine` | No | `postgresql/16` | PostgreSQL version |
+| `db_cluster_size` | No | `1` | `1` for standalone, `3` for high availability |
+| `app_db_name` | No | `appdb` | Application database name |
+| `app_db_user` | No | `appuser` | Application database user |
+| `jwt_secret` | No | _(auto-generated)_ | JWT signing secret — leave blank to auto-generate |
+| `refresh_api_secret` | No | _(auto-generated)_ | Bearer secret for the `/api/refresh` endpoint |
+| `token_encryption_key` | No | _(auto-generated)_ | Fernet key for encrypting stored Linode tokens |
+| `cors_origins` | No | _(auto-detected)_ | Allowed frontend origins — auto-uses rDNS if empty |
+| `allow_registration` | No | `true` | Enable public registration on first boot |
+| `initial_admin_email` | No | — | Auto-create an admin account with this email |
+| `initial_admin_password` | No | — | Password for the auto-created admin account |
+| `trusted_proxy_count` | No | `0` | Proxy hops to trust (`1` if behind a load balancer) |
+| `ssl_domain` | No | — | Custom domain for SSL certificate (optional) |
+| `ssl_email` | No | — | Contact email — providing this enables automatic Let's Encrypt SSL |
+
+A minimal `terraform.tfvars` example:
 
 ```hcl
-# REQUIRED
 linode_token     = "your-linode-pat-here"
 vm_root_password = "ChangeMe!SuperStr0ng#Password"
 git_repo_url     = "https://github.com/your-org/lccm.git"
 
-# Recommended
-region    = "us-mia"   # us-east, us-central, eu-west, ap-south, etc.
+region    = "us-mia"
 env_label = "prod"
 
-# SSH access (add your public key to log in as root)
 vm_ssh_keys = [
   "ssh-ed25519 AAAA... you@machine",
 ]
 
-# VM sizing
-vm_type = "g6-standard-2"   # 2 vCPU, 4 GB RAM
-vm_image = "linode/ubuntu22.04"
-
-# Managed PostgreSQL
-db_type         = "g6-nanode-1"   # use g6-standard-2 for higher load
-db_cluster_size = 1               # set to 3 for high availability
-
-# First admin account (created automatically on first boot)
 initial_admin_email    = "admin@example.com"
 initial_admin_password = "ChangeMe!Admin#Password"
 
-# SSL — provide ssl_email to enable automatic Let's Encrypt HTTPS
-ssl_domain = ""                    # optional custom domain
-ssl_email  = "admin@example.com"   # set this to enable SSL
+# Optional: enable HTTPS automatically
+ssl_email  = "admin@example.com"
+ssl_domain = "lccm.example.com"   # leave empty to use Linode rDNS hostname
 ```
 
-#### 3. Deploy
+### 3. Deploy
 
 ```bash
 terraform init
@@ -170,16 +174,11 @@ terraform plan
 terraform apply
 ```
 
-Terraform will output the VM's public IP address and the database host. Provisioning takes approximately 5–10 minutes (the managed database takes the most time).
+Provisioning takes approximately 10–15 minutes. The managed PostgreSQL cluster takes the most time to become available.
 
-#### 4. Access the application
+### 4. Access the application
 
-Once provisioning completes, the frontend is available at:
-
-- Without SSL: `http://<vm-ip>` (or the Linode rDNS hostname shown in the output)
-- With SSL: `https://<your-domain>` (if `ssl_email` was set)
-
-#### Terraform Outputs
+Terraform prints outputs when the apply completes:
 
 | Output | Description |
 |--------|-------------|
@@ -188,123 +187,24 @@ Once provisioning completes, the frontend is available at:
 | `db_host` | Managed PostgreSQL hostname |
 | `app_url` | Full application URL |
 
----
+- **Without SSL:** `http://<vm_ip>` or `http://<vm_rdns>`
+- **With SSL:** `https://<ssl_domain>` (DNS must point to `vm_ip` before running Terraform)
 
-### Option B: Docker Compose (Self-Managed Server)
-
-Use this option when you already have a server (any Linux host with Docker installed).
-
-#### 1. Clone the repository
+### 5. Destroy
 
 ```bash
-git clone https://github.com/your-org/lccm.git
-cd lccm
+terraform destroy
 ```
 
-#### 2. Configure the backend environment
-
-```bash
-cp backend/.env.example backend/.env
-```
-
-Edit `backend/.env` and fill in all required values. See the [Environment Variables Reference](#environment-variables-reference).
-
-Generate the required secrets:
-
-```bash
-# JWT secret
-python3 -c "import secrets; print(secrets.token_hex(32))"
-
-# Refresh API secret
-python3 -c "import secrets; print(secrets.token_hex(32))"
-
-# Token encryption key (Fernet)
-python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-```
-
-#### 3. Configure the frontend environment
-
-Create a `.env` file in the project root:
-
-```bash
-VITE_API_BASE=http://your-server-ip-or-domain
-```
-
-If you will be running behind SSL, use `https://`.
-
-#### 4. Build and start
-
-```bash
-# Build and start backend
-docker compose up -d --build
-
-# Build the frontend
-npm ci
-npm run build
-```
-
-The frontend static files are served by Nginx. See [SSL / TLS](#ssl--tls) for HTTPS setup.
-
-#### 5. Enable registration and create the first admin
-
-Set `ALLOW_REGISTRATION=true` in `backend/.env`, then restart the backend:
-
-```bash
-docker compose restart backend
-```
-
-Open the application URL and register your admin account. After registering, set `ALLOW_REGISTRATION=false` and restart the backend again.
-
----
-
-### Option C: Manual / Local Development
-
-#### Backend
-
-```bash
-cd backend
-
-# Create and activate a virtual environment
-python3 -m venv venv
-source venv/bin/activate      # Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Create environment file
-cp .env.example .env
-# Edit .env with your database and secret values
-
-# Run database migrations and start the server
-./start.sh
-
-# Or step by step:
-python -m app.migrations.run_migrations
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-The API will be available at `http://localhost:8000`.
-
-#### Frontend
-
-```bash
-# In the project root
-npm install
-
-# Create environment file
-echo "VITE_API_BASE=http://localhost:8000" > .env
-
-# Start the development server
-npm run dev
-```
-
-The UI will be available at `http://localhost:5173`.
+This removes all provisioned resources including the VM, database, VPC, and firewall.
 
 ---
 
 ## Environment Variables Reference
 
-### Backend (`backend/.env`)
+Secrets and configuration are set via `terraform.tfvars` and written automatically to the VM by the provisioning script. They are documented here for reference when rotating values or debugging.
+
+### Backend environment
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
@@ -318,13 +218,15 @@ The UI will be available at `http://localhost:5173`.
 | `JWT_ALGORITHM` | No | `HS256` | JWT algorithm |
 | `JWT_EXPIRE_MINUTES` | No | `480` | Session duration in minutes (480 = 8 hours) |
 | `LINODE_API_BASE` | No | `https://api.linode.com/v4` | Linode API base URL |
-| `REFRESH_API_SECRET` | Yes | — | Bearer secret for the `/api/refresh` endpoint used by cron jobs |
+| `REFRESH_API_SECRET` | Yes | — | Bearer secret for the `/api/refresh` cron endpoint |
 | `CORS_ORIGINS` | Yes | — | Comma-separated list of allowed frontend origins |
 | `TOKEN_ENCRYPTION_KEY` | Yes | — | Fernet key for encrypting stored Linode API tokens |
 | `ALLOW_REGISTRATION` | No | `false` | Set to `true` only when creating the first admin account |
-| `TRUSTED_PROXY_COUNT` | No | `0` | Number of trusted reverse proxy hops (set to `1` if behind a load balancer) |
+| `TRUSTED_PROXY_COUNT` | No | `0` | Proxy hops to trust (`1` if behind a load balancer) |
 
-#### Generating secrets
+> **Important:** `TOKEN_ENCRYPTION_KEY` must remain the same for the lifetime of the deployment. Changing it will make all stored Linode API tokens unreadable, requiring you to re-enter them in the application.
+
+To manually generate values if needed:
 
 ```bash
 # JWT_SECRET and REFRESH_API_SECRET
@@ -334,49 +236,39 @@ python3 -c "import secrets; print(secrets.token_hex(32))"
 python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
-> **Important:** `TOKEN_ENCRYPTION_KEY` must remain the same for the lifetime of the deployment. Changing it will make all stored Linode API tokens unreadable, requiring you to re-enter them in the application.
+### Frontend environment
 
-### Frontend (`.env` in project root)
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `VITE_API_BASE` | Yes | — | Backend API base URL (no trailing slash). E.g., `https://lccm.example.com` |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `VITE_API_BASE` | Yes | Backend API base URL (no trailing slash). E.g., `https://lccm.example.com` |
 
 ---
 
 ## First Login & Initial Setup
 
-### 1. Enable registration
+### 1. Register the admin account
 
-Set `ALLOW_REGISTRATION=true` in `backend/.env` and restart the backend (or set `initial_admin_email` / `initial_admin_password` in `terraform.tfvars` for automatic creation).
+If `initial_admin_email` and `initial_admin_password` were set in `terraform.tfvars`, the admin account is created automatically — skip to step 2.
 
-### 2. Register the admin account
+Otherwise, Terraform sets `allow_registration = true` by default on first boot. Navigate to the application URL and register your account. The first account created is automatically assigned the **Admin** role.
 
-Navigate to the application URL. You will be presented with a registration screen. The first account created is automatically assigned the **Admin** role.
-
-### 3. Disable registration
-
-After creating your admin account, set `ALLOW_REGISTRATION=false` in `backend/.env` and restart the backend. This closes the public registration endpoint.
+After registering, disable open registration by SSH-ing into the VM and setting `ALLOW_REGISTRATION=false` in `/opt/lccm/backend/.env`, then restart the backend:
 
 ```bash
-# Docker Compose
-docker compose restart backend
-
-# Systemd
 sudo systemctl restart lccm-backend
 ```
 
-### 4. Connect a Linode account
+### 2. Connect a Linode account
 
 1. Log in to LCCM
 2. Navigate to **Accounts**
 3. Click **Add Account**
-4. Enter a display name and your Linode Personal Access Token
+4. Enter a display name and your Linode Personal Access Token (read-only)
 5. Click **Save**
 
-### 5. Run your first sync
+### 3. Run your first sync
 
-Navigate to the **Dashboard** and click **Sync Now**, or navigate to any account and trigger a sync from there. The sync engine will:
+Navigate to the **Dashboard** and click **Sync Now**. The sync engine will:
 
 1. Fetch all resources from the Linode API
 2. Detect configuration changes and create snapshots
@@ -387,32 +279,28 @@ Navigate to the **Dashboard** and click **Sync Now**, or navigate to any account
 
 ## SSL / TLS
 
-### Automatic SSL (Terraform)
+### Automatic (via Terraform)
 
-Set `ssl_email` in `terraform.tfvars` before running `terraform apply`. The provisioning script will automatically obtain a Let's Encrypt certificate and configure Nginx for HTTPS.
+Set `ssl_email` in `terraform.tfvars` before running `terraform apply`. The provisioning script obtains a Let's Encrypt certificate and fully configures Nginx for HTTPS automatically.
 
 ```hcl
-ssl_email  = "admin@example.com"   # enables automatic SSL
-ssl_domain = "lccm.example.com"    # optional; uses rDNS hostname if empty
+ssl_email  = "admin@example.com"
+ssl_domain = "lccm.example.com"   # your DNS must already point to the VM's IP
 ```
 
-### Manual SSL Setup
+### Manual (post-deployment)
 
-After deployment, run the included setup script:
+SSH into the VM and run the included setup script:
 
 ```bash
-sudo bash setup_ssl.sh lccm.example.com admin@example.com
+sudo bash /opt/lccm/setup_ssl.sh lccm.example.com admin@example.com
 ```
 
-This script will:
-1. Install Certbot if not present
-2. Obtain a Let's Encrypt certificate via webroot validation
-3. Write a full Nginx HTTPS configuration
-4. Set up automatic certificate renewal via systemd timer
+This script installs Certbot, obtains a certificate via webroot validation, writes the full Nginx HTTPS configuration, and sets up a systemd timer for automatic renewal.
 
-### Certificate Renewal
+### Certificate renewal
 
-Certificates are renewed automatically via a systemd timer created by the setup script. To test renewal manually:
+Renewal is automatic via a systemd timer. To test manually:
 
 ```bash
 sudo certbot renew --dry-run
@@ -422,22 +310,13 @@ sudo certbot renew --dry-run
 
 ## Database Migrations
 
-Migrations run automatically at backend startup via `backend/start.sh`. They are also available on demand via the admin API endpoint.
+Migrations run automatically when the backend starts. They are idempotent — each migration is only applied once regardless of how many times the backend restarts.
 
-### Automatic (on startup)
-
-The backend runs all pending migrations in order before starting Uvicorn. This is safe to run repeatedly — each migration is only applied once.
-
-### Manual trigger
+To trigger migrations manually via the API (admin role required):
 
 ```bash
-# Via the API (admin role required)
-curl -X POST http://localhost:8000/api/admin/run-migrations \
+curl -X POST https://lccm.example.com/api/admin/run-migrations \
   -H "Authorization: Bearer <your-admin-jwt-token>"
-
-# Directly with Python
-cd backend
-python -m app.migrations.run_migrations
 ```
 
 ### Migration history
@@ -467,20 +346,20 @@ python -m app.migrations.run_migrations
 
 ## Automated Sync Scheduling
 
-LCCM does not include a built-in scheduler daemon. Instead, it exposes a protected endpoint that can be called by any external scheduler (cron, Kubernetes CronJob, GitHub Actions, etc.).
+LCCM exposes a protected endpoint for external schedulers. Call it from cron, a Kubernetes CronJob, GitHub Actions, or any other scheduler.
 
 ### Endpoint
 
 ```
-GET /api/refresh?token=<REFRESH_API_SECRET>
+GET  /api/refresh?token=<REFRESH_API_SECRET>
 POST /api/refresh
-  Authorization: Bearer <REFRESH_API_SECRET>
+     Authorization: Bearer <REFRESH_API_SECRET>
 ```
 
 ### Cron example (every 6 hours)
 
 ```bash
-# Edit with: crontab -e
+# crontab -e
 0 */6 * * * curl -s "https://lccm.example.com/api/refresh?token=your-refresh-secret" >> /var/log/lccm-sync.log 2>&1
 ```
 
@@ -509,7 +388,7 @@ Type=oneshot
 ExecStart=/usr/bin/curl -s "https://lccm.example.com/api/refresh?token=your-refresh-secret"
 ```
 
-The `backend/sync_cron.sh` script in the repository provides a ready-made example.
+A ready-made script is also available at `backend/sync_cron.sh`.
 
 ---
 
@@ -525,7 +404,7 @@ LCCM uses a three-tier RBAC model combined with per-account access grants.
 
 ### Per-account access
 
-Admins can grant specific users access to individual Linode accounts with optional feature restrictions:
+Admins can grant users access to individual Linode accounts with optional feature restrictions:
 
 - `can_view_compliance` — allows viewing compliance results
 - `can_view_costs` — allows viewing cost-related data
@@ -540,7 +419,7 @@ Passwords must be at least 12 characters and include at least one uppercase lett
 
 ## API Reference
 
-The full API documentation is available in `API.md`. A brief summary of key endpoints:
+The full API documentation is in `API.md`. Key endpoints:
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -566,102 +445,59 @@ All protected endpoints require:
 Authorization: Bearer <jwt-token>
 ```
 
-The `/api/refresh` endpoint also accepts `?token=<REFRESH_API_SECRET>` as a query parameter for cron job use.
-
----
-
-## Nixpacks / PaaS Deployment
-
-The project includes Nixpacks configuration files for deployment on platforms like Railway, Render, or any Nixpacks-compatible host.
-
-### Frontend (`nixpacks.toml` in project root)
-
-```toml
-[phases.setup]
-nixPkgs = ["nodejs_22"]
-
-[phases.install]
-cmds = ["npm ci"]
-
-[phases.build]
-cmds = ["npm run build"]
-
-[start]
-cmd = "npx serve -s dist -l $PORT"
-```
-
-### Backend (`backend/nixpacks.toml`)
-
-```toml
-[phases.setup]
-nixPkgs = ["python313", "postgresql"]
-
-[phases.install]
-cmds = [
-  "python -m ensurepip --upgrade",
-  "python -m pip install --upgrade pip",
-  "python -m pip install -r requirements.txt"
-]
-
-[start]
-cmd = "uvicorn main:app --host 0.0.0.0 --port $PORT"
-```
-
-Set all backend environment variables in your platform's secret/environment configuration. The `PORT` variable is set automatically by most PaaS platforms.
+The `/api/refresh` endpoint also accepts `?token=<REFRESH_API_SECRET>` as a query parameter for cron use.
 
 ---
 
 ## Troubleshooting
 
+### Application not reachable after deploy
+
+The VM provisioning script runs in the background after Terraform completes. Allow 2–3 minutes after `terraform apply` finishes for the application to come online. Check provisioning progress:
+
+```bash
+ssh root@<vm_ip>
+sudo journalctl -u cloud-final -f
+```
+
 ### Backend fails to start
 
-**Symptom:** `uvicorn` exits immediately with a configuration error.
-
 **Check:**
-- All required environment variables in `backend/.env` are set
+- All required environment variables in `/opt/lccm/backend/.env` are set
 - `TOKEN_ENCRYPTION_KEY` is a valid Fernet key (44 base64 characters ending in `=`)
-- Database connection details are correct and the database is reachable
-- `DB_SSL=require` if using Akamai Managed Databases
+- Database is reachable and `DB_SSL=require` is set for Akamai Managed Databases
+
+```bash
+ssh root@<vm_ip>
+sudo journalctl -u lccm-backend -f
+```
 
 ### Cannot connect to the database
 
-**Symptom:** `asyncpg.exceptions.ConnectionDoesNotExistError` or similar.
-
 **Check:**
-- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` are all correct
-- If using Akamai Managed Database, the VM's private IP is in the database's allowed hosts list (Terraform configures this automatically)
-- Firewall rules allow TCP on the database port from the application server
+- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` are correct in `/opt/lccm/backend/.env`
+- The VM's private IP is in the database's allowed hosts list (Terraform configures this automatically via the VPC)
+- Firewall rules allow TCP on the database port from the VM
 
 ### Linode API tokens not working after `TOKEN_ENCRYPTION_KEY` change
 
-If you rotate `TOKEN_ENCRYPTION_KEY`, all stored Linode API tokens become unreadable. You must re-enter each token in the **Accounts** page after changing this key.
+Rotating `TOKEN_ENCRYPTION_KEY` makes all stored tokens unreadable. Re-enter each token in the **Accounts** page after changing this value.
 
 ### CORS errors in the browser
 
 **Check:**
-- `CORS_ORIGINS` in `backend/.env` includes the exact origin used to access the frontend (e.g., `https://lccm.example.com` — no trailing slash)
-- `VITE_API_BASE` in the frontend `.env` matches the backend URL exactly
+- `CORS_ORIGINS` includes the exact origin used to access the frontend (e.g., `https://lccm.example.com` — no trailing slash)
+- `VITE_API_BASE` in the built frontend matches the backend URL exactly (requires a rebuild if changed)
 
 ### Sync returns no resources
 
 **Check:**
 - The Linode API token has the correct read permissions (see [Prerequisites](#prerequisites))
-- The token is for the correct account and region
-- The account actually has resources in the selected region
+- The token belongs to the correct account
 
-### 401 errors after password / secret changes
+### 401 errors after rotating `JWT_SECRET`
 
-JWT tokens are invalidated when `JWT_SECRET` changes. All users must log in again after rotating this secret.
-
-### Viewing backend logs
-
-```bash
-# Docker Compose
-docker compose logs -f backend
-
-# Systemd
-sudo journalctl -u lccm-backend -f
-```
+All active sessions are invalidated when `JWT_SECRET` changes. All users must log in again.
 
 ---
 
@@ -672,15 +508,15 @@ sudo journalctl -u lccm-backend -f
 | `API.md` | Full API reference with request/response examples |
 | `USER_GUIDE.md` | End-user guide for all application features |
 | `NGINX_SSL_SETUP.md` | Detailed Nginx and SSL/TLS configuration guide |
-| `summary.md` | Technical specification including database schema and rule logic |
-| `backend/openapi.yaml` | OpenAPI 3.0 specification for the backend API |
+| `summary.md` | Technical specification: database schema and rule evaluation logic |
+| `backend/openapi.yaml` | OpenAPI 3.0 specification |
 
 ---
 
 ## Security Notes
 
-- Never commit `backend/.env`, `terraform.tfvars`, or any file containing secrets to version control. Both files are listed in `.gitignore` by default.
-- Rotate `JWT_SECRET` and `REFRESH_API_SECRET` periodically. Note that rotating `JWT_SECRET` invalidates all active sessions.
-- Keep `ALLOW_REGISTRATION=false` at all times except when explicitly creating a new account.
-- Use a dedicated read-only Linode API token for LCCM rather than a full-access token.
+- Never commit `terraform.tfvars` to version control — it contains secrets. It is listed in `.gitignore` by default.
+- Rotate `JWT_SECRET` and `REFRESH_API_SECRET` periodically. Rotating `JWT_SECRET` invalidates all active sessions.
+- Keep `ALLOW_REGISTRATION=false` at all times except when explicitly creating a new user account.
+- Use a dedicated read-only Linode API token for each connected account.
 - Enable 2FA on your LCCM admin account after first login.
