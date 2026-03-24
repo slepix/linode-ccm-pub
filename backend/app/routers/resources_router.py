@@ -29,7 +29,7 @@ def list_resources(
         raise HTTPException(status_code=403, detail="Access denied")
 
     cur = db.cursor()
-    conditions = ["account_id = %s"]
+    conditions = ["account_id = %s", "deleted_at IS NULL"]
     params = [account_id]
     if resource_type:
         conditions.append("resource_type = %s")
@@ -49,11 +49,12 @@ def list_resources(
 def get_resource(resource_id: str, current_user=Depends(get_current_user), db=Depends(get_db)):
     cur = db.cursor()
     if current_user["role"] == "admin":
-        cur.execute("SELECT * FROM resources WHERE id = %s", (resource_id,))
+        cur.execute("SELECT * FROM resources WHERE id = %s AND deleted_at IS NULL", (resource_id,))
     else:
         cur.execute("""
             SELECT r.* FROM resources r
             WHERE r.id = %s
+              AND r.deleted_at IS NULL
               AND r.account_id IN (
                 SELECT account_id FROM user_account_access WHERE user_id = %s
               )
@@ -72,11 +73,12 @@ def get_resource_snapshots(
 ):
     cur = db.cursor()
     if current_user["role"] == "admin":
-        cur.execute("SELECT id FROM resources WHERE id = %s", (resource_id,))
+        cur.execute("SELECT id FROM resources WHERE id = %s AND deleted_at IS NULL", (resource_id,))
     else:
         cur.execute("""
             SELECT id FROM resources
             WHERE id = %s
+              AND deleted_at IS NULL
               AND account_id IN (
                 SELECT account_id FROM user_account_access WHERE user_id = %s
               )

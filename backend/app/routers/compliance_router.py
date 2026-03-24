@@ -71,9 +71,10 @@ def get_results(
             row_to_json(res.*) as resource
         FROM compliance_results cr
         JOIN compliance_rules rule ON rule.id = cr.rule_id
-        LEFT JOIN resources res ON res.id = cr.resource_id
+        LEFT JOIN resources res ON res.id = cr.resource_id AND res.deleted_at IS NULL
         LEFT JOIN org_users u ON u.id = cr.acknowledged_by
         WHERE {where}
+          AND (cr.resource_id IS NULL OR res.id IS NOT NULL)
         ORDER BY
             CASE cr.status WHEN 'non_compliant' THEN 1 WHEN 'compliant' THEN 2 ELSE 3 END,
             CASE rule.severity WHEN 'critical' THEN 1 WHEN 'warning' THEN 2 ELSE 3 END
@@ -96,8 +97,10 @@ def get_score(account_id: str = Query(...), current_user=Depends(get_current_use
             CASE WHEN cr.acknowledged = TRUE THEN 'compliant' ELSE cr.status END as effective_status
         FROM compliance_results cr
         JOIN compliance_rules rule ON rule.id = cr.rule_id
+        LEFT JOIN resources res ON res.id = cr.resource_id AND res.deleted_at IS NULL
         WHERE cr.account_id = %s
           AND cr.status != 'not_applicable'
+          AND (cr.resource_id IS NULL OR res.id IS NOT NULL)
     """, (account_id,))
     rows = cur.fetchall()
 

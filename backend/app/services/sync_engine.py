@@ -502,6 +502,30 @@ def _write_to_db(account_id: str, data: dict, db, log: list, now: datetime) -> t
                         VALUES (%s,%s,%s,'contains',%s)
                     """, (account_id, vpc_db_id, ln_db_id, now))
 
+    logmsg("Marking deleted resources...")
+    if synced_resource_ids:
+        cur.execute("""
+            UPDATE resources
+            SET deleted_at = %s, updated_at = NOW()
+            WHERE account_id = %s
+              AND deleted_at IS NULL
+              AND id::text NOT IN %s
+        """, (now, account_id, tuple(synced_resource_ids)))
+    else:
+        cur.execute("""
+            UPDATE resources
+            SET deleted_at = %s, updated_at = NOW()
+            WHERE account_id = %s AND deleted_at IS NULL
+        """, (now, account_id))
+
+    cur.execute("""
+        UPDATE resources
+        SET deleted_at = NULL, updated_at = NOW()
+        WHERE account_id = %s
+          AND deleted_at IS NOT NULL
+          AND id::text IN %s
+    """, (account_id, tuple(synced_resource_ids))) if synced_resource_ids else None
+
     cur.execute("UPDATE linode_accounts SET last_sync_at=%s, updated_at=NOW() WHERE id=%s", (now, account_id))
     logmsg(f"Sync complete. {resource_count} resources written.")
     return resource_count, {"linode_db_ids": linode_db_ids, "vpc_db_ids": vpc_db_ids}

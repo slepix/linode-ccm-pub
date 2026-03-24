@@ -1007,7 +1007,7 @@ def evaluate_account(account_id: str, api_token: str, db, log: list) -> dict:
     logmsg("Starting compliance evaluation...")
 
     # --- Phase 1: Read all needed data from DB (hold connection briefly) ---
-    cur.execute("SELECT * FROM resources WHERE account_id = %s", (account_id,))
+    cur.execute("SELECT * FROM resources WHERE account_id = %s AND deleted_at IS NULL", (account_id,))
     all_resources = [dict(r) for r in cur.fetchall()]
 
     cur.execute("""
