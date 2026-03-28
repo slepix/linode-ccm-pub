@@ -12,12 +12,13 @@ A cloud compliance and security management platform for Linode (Akamai Cloud) in
 4. [Deployment](#deployment)
 5. [Environment Variables Reference](#environment-variables-reference)
 6. [First Login & Initial Setup](#first-login--initial-setup)
-7. [SSL / TLS](#ssl--tls)
-8. [Database Migrations](#database-migrations)
-9. [Automated Sync Scheduling](#automated-sync-scheduling)
-10. [User Roles & Access Control](#user-roles--access-control)
-11. [API Reference](#api-reference)
-12. [Troubleshooting](#troubleshooting)
+7. [Updating LCCM](#updating-lccm)
+8. [SSL / TLS](#ssl--tls)
+9. [Database Migrations](#database-migrations)
+10. [Automated Sync Scheduling](#automated-sync-scheduling)
+11. [User Roles & Access Control](#user-roles--access-control)
+12. [API Reference](#api-reference)
+13. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -274,6 +275,73 @@ Navigate to the **Dashboard** and click **Sync Now**. The sync engine will:
 2. Detect configuration changes and create snapshots
 3. Evaluate all active compliance rules against each resource
 4. Update compliance scores
+
+---
+
+## Updating LCCM
+
+The easiest way to update a running deployment is with the included `updateapp.sh` script. SSH into the VM and run it from the repository root:
+
+```bash
+ssh root@<vm_ip>
+cd /opt/lccm
+sudo bash updateapp.sh
+```
+
+The script performs the following steps automatically:
+
+1. **Stashes local changes** (if any) so the pull succeeds cleanly, then restores them afterward
+2. **Pulls the latest code** from the configured Git remote (`git pull`)
+3. **Rebuilds the frontend** — runs `npm ci` and `npm run build`, producing a fresh `dist/` bundle
+4. **Deploys static files** — copies the new `dist/` to `/var/www/html/` for Nginx to serve
+5. **Rebuilds the backend Docker image** — runs `docker compose build --pull backend` with no cache for dependencies
+6. **Restarts the backend container** — uses `docker compose up -d --no-deps backend` for a zero-downtime swap
+7. **Waits for the health check** — polls `/health` until the backend responds or times out after ~60 seconds
+8. **Reloads Nginx** — sends a reload signal to pick up any config changes (works for both system-service and Docker-based Nginx)
+
+Database migrations are applied automatically on backend startup, so any schema changes included in the update are handled without manual intervention.
+
+### Manual update steps
+
+If you prefer to run each step individually, or need to update only one component:
+
+**Pull latest code:**
+```bash
+cd /opt/lccm
+git pull
+```
+
+**Rebuild frontend only:**
+```bash
+npm ci
+npm run build
+sudo cp -r dist/. /var/www/html/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+**Rebuild backend only:**
+```bash
+cd /opt/lccm
+docker compose build --pull backend
+docker compose up -d --no-deps backend
+```
+
+**Apply migrations manually (admin API token required):**
+```bash
+curl -X POST https://lccm.example.com/api/admin/run-migrations \
+  -H "Authorization: Bearer <your-admin-jwt-token>"
+```
+
+### Updating environment variables
+
+If a code update introduces new environment variables, add them to `/opt/lccm/backend/.env` before restarting the backend:
+
+```bash
+nano /opt/lccm/backend/.env
+docker compose restart backend
+```
+
+> **Note:** Never change `TOKEN_ENCRYPTION_KEY` on an existing deployment — it will make all stored Linode API tokens unreadable and require re-entry in the Accounts page.
 
 ---
 
