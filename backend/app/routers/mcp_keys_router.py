@@ -112,7 +112,7 @@ def create_key(body: CreateKeyRequest, current_user=Depends(get_current_user), d
 
 
 @router.get("/settings")
-def get_mcp_settings(current_user=Depends(require_admin), db=Depends(get_db)):
+def get_mcp_settings(current_user=Depends(get_current_user), db=Depends(get_db)):
     cur = db.cursor()
     cur.execute("SELECT value FROM app_settings WHERE key = 'mcp_enabled'")
     row = cur.fetchone()

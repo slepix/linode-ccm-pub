@@ -289,14 +289,14 @@ export default function McpPage() {
     try {
       const [keyList, settings] = await Promise.all([
         mcpApi.listKeys(),
-        isAdmin ? mcpApi.getSettings() : Promise.resolve(null),
+        mcpApi.getSettings(),
       ]);
       setKeys(keyList);
       if (settings) setMcpEnabled(settings.mcp_enabled);
     } finally {
       setLoading(false);
     }
-  }, [isAdmin]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
