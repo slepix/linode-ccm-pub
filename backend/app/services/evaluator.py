@@ -91,6 +91,7 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
         inbound_rules = specs.get("inbound_rules_detail", [])
         if inbound_policy == "ACCEPT" and not inbound_rules:
             return "non_compliant", "Inbound policy is ACCEPT with no rules — all traffic allowed."
+        violations = []
         for r in inbound_rules:
             if r.get("action") != "ACCEPT":
                 continue
@@ -105,10 +106,13 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
             if not open_addr:
                 continue
             ports = r.get("ports", "")
+            label = r.get("label", "")
             if not ports or proto == "ALL":
-                return "non_compliant", f"Rule '{r.get('label','')}' allows unrestricted inbound on all ports."
-            if _check_port_in_range(ports, sensitive_ports):
-                return "non_compliant", f"Rule '{r.get('label','')}' allows unrestricted inbound on sensitive port(s): {ports}."
+                violations.append(f"Rule '{label}' allows unrestricted inbound on all ports.")
+            elif _check_port_in_range(ports, sensitive_ports):
+                violations.append(f"Rule '{label}' allows unrestricted inbound on sensitive port(s): {ports}.")
+        if violations:
+            return "non_compliant", " ".join(violations)
         return "compliant", None
 
     # --- firewall_has_targets ---
@@ -173,9 +177,9 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
         require_non_empty = cfg.get("require_non_empty", False)
         if require_non_empty and not allow_list:
             return "non_compliant", "Database allow list is empty."
-        for cidr in allow_list:
-            if cidr in forbidden:
-                return "non_compliant", f"Database allow list contains forbidden CIDR: {cidr}"
+        bad_cidrs = [cidr for cidr in allow_list if cidr in forbidden]
+        if bad_cidrs:
+            return "non_compliant", f"Database allow list contains forbidden CIDR(s): {', '.join(bad_cidrs)}."
         return "compliant", None
 
     # --- db_public_access ---
@@ -422,11 +426,14 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
 
         req_in = cfg.get("required_inbound_policy", "DROP")
         req_out = cfg.get("required_outbound_policy", "")
+        violations = []
         for fw_specs in matched_fw_specs:
             if req_in and fw_specs.get("inbound_policy") != req_in:
-                return "non_compliant", f"Firewall inbound policy is '{fw_specs.get('inbound_policy')}', expected '{req_in}'."
+                violations.append(f"Firewall inbound policy is '{fw_specs.get('inbound_policy')}', expected '{req_in}'.")
             if req_out and fw_specs.get("outbound_policy") != req_out:
-                return "non_compliant", f"Firewall outbound policy is '{fw_specs.get('outbound_policy')}', expected '{req_out}'."
+                violations.append(f"Firewall outbound policy is '{fw_specs.get('outbound_policy')}', expected '{req_out}'.")
+        if violations:
+            return "non_compliant", " ".join(violations)
         return "compliant", None
 
     # --- nodebalancer_protocol_check ---
@@ -438,12 +445,15 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
             return "not_applicable", "No configs found."
         allowed = cfg.get("allowed_protocols", ["https"])
         forbidden = cfg.get("forbidden_protocols", [])
+        violations = []
         for c in configs:
             proto = c.get("protocol", "").lower()
             if forbidden and proto in forbidden:
-                return "non_compliant", f"Port {c.get('port')} uses forbidden protocol '{proto}'."
-            if allowed and proto not in allowed:
-                return "non_compliant", f"Port {c.get('port')} uses protocol '{proto}', allowed: {allowed}."
+                violations.append(f"Port {c.get('port')} uses forbidden protocol '{proto}'.")
+            elif allowed and proto not in allowed:
+                violations.append(f"Port {c.get('port')} uses protocol '{proto}', allowed: {allowed}.")
+        if violations:
+            return "non_compliant", " ".join(violations)
         return "compliant", None
 
     # --- nodebalancer_port_allowlist ---
@@ -454,9 +464,9 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
         if not configs:
             return "not_applicable", None
         allowed = cfg.get("allowed_ports", [443])
-        for c in configs:
-            if c.get("port") not in allowed:
-                return "non_compliant", f"Port {c.get('port')} is not in the allowed ports list."
+        bad_ports = [str(c.get("port")) for c in configs if c.get("port") not in allowed]
+        if bad_ports:
+            return "non_compliant", f"Port(s) {', '.join(bad_ports)} are not in the allowed ports list."
         return "compliant", None
 
     # --- firewall_all_ports_allowed ---
@@ -529,6 +539,7 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
         if not resource:
             return "not_applicable", None
         sensitive_ports = cfg.get("sensitive_ports", [22, 3389, 3306, 5432, 6379, 27017])
+        violations = []
         for r in specs.get("inbound_rules_detail", []):
             if r.get("action") != "ACCEPT":
                 continue
@@ -542,7 +553,9 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
                 continue
             ports = r.get("ports", "")
             if not ports or proto == "ALL" or _check_port_in_range(ports, sensitive_ports):
-                return "non_compliant", f"Rule '{r.get('label','')}' allows RFC-1918 lateral movement on sensitive port(s)."
+                violations.append(f"Rule '{r.get('label','')}' allows RFC-1918 lateral movement on sensitive port(s).")
+        if violations:
+            return "non_compliant", " ".join(violations)
         return "compliant", None
 
     # --- firewall_no_duplicate_rules ---
@@ -554,14 +567,17 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
             ipv4s = sorted(addrs.get("ipv4", []))
             ipv6s = sorted(addrs.get("ipv6", []))
             return f"{r.get('action')}|{r.get('protocol')}|{r.get('ports','')}|{ipv4s}|{ipv6s}"
+        violations = []
         for direction, rules in [("inbound", specs.get("inbound_rules_detail", [])),
                                   ("outbound", specs.get("outbound_rules_detail", []))]:
             seen = set()
             for r in rules:
                 fp = fingerprint(r)
                 if fp in seen:
-                    return "non_compliant", f"Duplicate {direction} rule detected: '{r.get('label','')}'."
+                    violations.append(f"Duplicate {direction} rule detected: '{r.get('label','')}'.")
                 seen.add(fp)
+        if violations:
+            return "non_compliant", " ".join(violations)
         return "compliant", None
 
     # --- linode_in_vpc ---
@@ -579,9 +595,9 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
         forbidden_prefixes = cfg.get("forbidden_prefixes", [])
         allowed_prefixes = cfg.get("allowed_prefixes", [])
         if forbidden_prefixes:
-            for prefix in forbidden_prefixes:
-                if instance_type.startswith(prefix):
-                    return "non_compliant", f"Instance type '{instance_type}' is forbidden (matches prefix '{prefix}')."
+            matched = [p for p in forbidden_prefixes if instance_type.startswith(p)]
+            if matched:
+                return "non_compliant", f"Instance type '{instance_type}' is forbidden (matches prefix(es): {matched})."
         if allowed_prefixes:
             if not any(instance_type.startswith(p) for p in allowed_prefixes):
                 return "non_compliant", f"Instance type '{instance_type}' is not in the allowed prefixes: {allowed_prefixes}."
@@ -620,6 +636,7 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
         if outbound_policy == "ACCEPT" and not outbound_rules:
             for dp in dangerous_ports:
                 pass
+        violations = []
         for r in outbound_rules:
             if r.get("action") != "ACCEPT":
                 continue
@@ -632,10 +649,13 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
             proto = r.get("protocol", "").upper()
             if proto in ("ICMP", "IPENCAP"):
                 continue
+            label = r.get("label", "")
             if not ports or proto == "ALL":
-                return "non_compliant", f"Rule '{r.get('label','')}' allows unrestricted outbound on all ports (including dangerous ports {dangerous_ports})."
-            if _check_port_in_range(ports, dangerous_ports):
-                return "non_compliant", f"Rule '{r.get('label','')}' allows outbound on dangerous port(s): {ports}."
+                violations.append(f"Rule '{label}' allows unrestricted outbound on all ports (including dangerous ports {dangerous_ports}).")
+            elif _check_port_in_range(ports, dangerous_ports):
+                violations.append(f"Rule '{label}' allows outbound on dangerous port(s): {ports}.")
+        if violations:
+            return "non_compliant", " ".join(violations)
         return "compliant", None
 
     # --- firewall_cidr_too_broad ---
@@ -650,18 +670,22 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
             rules_to_check.extend(specs.get("inbound_rules_detail", []))
         if check_outbound:
             rules_to_check.extend(specs.get("outbound_rules_detail", []))
+        violations = []
         for r in rules_to_check:
             if r.get("action") != "ACCEPT":
                 continue
             addrs = r.get("addresses", {})
+            label = r.get("label", "")
             for addr in addrs.get("ipv4", []):
                 if "/" in addr and not _is_open_address(addr):
                     try:
                         prefix_len = int(addr.split("/")[1])
                         if prefix_len <= max_prefix_ipv4:
-                            return "non_compliant", f"Rule '{r.get('label','')}' allows a very broad CIDR: {addr} (/{prefix_len} <= /{max_prefix_ipv4})."
+                            violations.append(f"Rule '{label}' allows a very broad CIDR: {addr} (/{prefix_len} <= /{max_prefix_ipv4}).")
                     except ValueError:
                         pass
+        if violations:
+            return "non_compliant", " ".join(violations)
         return "compliant", None
 
     # --- firewall_rule_count ---
@@ -684,10 +708,12 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
         if not pools:
             return "not_applicable", "No node pools found."
         min_per_pool = cfg.get("min_per_pool", 2)
-        for pool in pools:
-            count = pool.get("count", 0)
-            if count < min_per_pool:
-                return "non_compliant", f"Node pool '{pool.get('id')}' has {count} node(s), minimum is {min_per_pool} per pool."
+        violations = [
+            f"Node pool '{pool.get('id')}' has {pool.get('count', 0)} node(s), minimum is {min_per_pool} per pool."
+            for pool in pools if pool.get("count", 0) < min_per_pool
+        ]
+        if violations:
+            return "non_compliant", " ".join(violations)
         return "compliant", None
 
     # --- db_backup_recency ---
@@ -829,6 +855,7 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
     if ct == "firewall_no_icmp_inbound":
         if not resource:
             return "not_applicable", None
+        violations = []
         for r in specs.get("inbound_rules_detail", []):
             if r.get("action") != "ACCEPT":
                 continue
@@ -837,7 +864,9 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
             addrs = r.get("addresses", {})
             all_addrs = addrs.get("ipv4", []) + addrs.get("ipv6", [])
             if any(_is_open_address(a) for a in all_addrs) or not all_addrs:
-                return "non_compliant", f"Rule '{r.get('label','')}' allows unrestricted inbound ICMP from 0.0.0.0/0."
+                violations.append(f"Rule '{r.get('label','')}' allows unrestricted inbound ICMP from 0.0.0.0/0.")
+        if violations:
+            return "non_compliant", " ".join(violations)
         return "compliant", None
 
     # --- db_ssl_required ---
@@ -929,15 +958,19 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
             return "not_applicable", "No node pools found."
         forbidden_prefixes = cfg.get("forbidden_prefixes", [])
         allowed_prefixes = cfg.get("allowed_prefixes", [])
+        violations = []
         for pool in pools:
             pool_type = pool.get("type", "")
+            pool_id = pool.get("id", "")
             if forbidden_prefixes:
-                for prefix in forbidden_prefixes:
-                    if pool_type.startswith(prefix):
-                        return "non_compliant", f"Node pool '{pool.get('id')}' uses forbidden type '{pool_type}' (matches prefix '{prefix}')."
+                matched = [p for p in forbidden_prefixes if pool_type.startswith(p)]
+                if matched:
+                    violations.append(f"Node pool '{pool_id}' uses forbidden type '{pool_type}' (matches prefix(es): {matched}).")
             if allowed_prefixes:
                 if not any(pool_type.startswith(p) for p in allowed_prefixes):
-                    return "non_compliant", f"Node pool '{pool.get('id')}' uses type '{pool_type}' which is not in the allowed prefixes: {allowed_prefixes}."
+                    violations.append(f"Node pool '{pool_id}' uses type '{pool_type}' which is not in the allowed prefixes: {allowed_prefixes}.")
+        if violations:
+            return "non_compliant", " ".join(violations)
         return "compliant", None
 
     # --- nodebalancer_connection_throttle ---
@@ -948,10 +981,12 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
         if not configs:
             return "not_applicable", "No configs found."
         min_throttle = cfg.get("min_throttle", 1)
-        for c in configs:
-            throttle = c.get("client_conn_throttle", 0)
-            if throttle < min_throttle:
-                return "non_compliant", f"Port {c.get('port')} has connection throttle set to {throttle} (minimum: {min_throttle})."
+        violations = [
+            f"Port {c.get('port')} has connection throttle set to {c.get('client_conn_throttle', 0)} (minimum: {min_throttle})."
+            for c in configs if c.get("client_conn_throttle", 0) < min_throttle
+        ]
+        if violations:
+            return "non_compliant", " ".join(violations)
         return "compliant", None
 
     # --- domain_active ---
