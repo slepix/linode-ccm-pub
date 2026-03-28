@@ -2,7 +2,7 @@
 
 Base URL: `http://<your-host>/api`
 
-All protected endpoints require an `Authorization: Bearer <token>` header. Tokens are obtained from the login or register endpoints.
+All protected endpoints require an `Authorization: Bearer <token>` header. Tokens are obtained from the login or register endpoints. Tokens may also be passed via the `auth_token` cookie.
 
 ---
 
@@ -12,9 +12,9 @@ All protected endpoints require an `Authorization: Bearer <token>` header. Token
 
 | Role | Description |
 |------|-------------|
-| `admin` | Full access: user management, accounts, migrations |
-| `power_user` | Can create accounts and trigger refresh operations |
-| `auditor` | Read-only access to accounts they have been granted |
+| `admin` | Full access: user management, accounts, migrations, settings |
+| `power_user` | Can create/manage accounts, trigger refresh, adjust compliance profiles |
+| `auditor` | Read-only access to accounts they have been explicitly granted |
 
 ---
 
@@ -23,7 +23,7 @@ All protected endpoints require an `Authorization: Bearer <token>` header. Token
 ### Auth
 
 #### `GET /api/auth/registration-open`
-Returns whether first-time registration is open (i.e., no users exist yet).
+Returns whether registration is currently open.
 
 **Auth:** None
 
@@ -35,7 +35,7 @@ Returns whether first-time registration is open (i.e., no users exist yet).
 ---
 
 #### `POST /api/auth/register`
-Register the first admin user. Only works when no users exist.
+Register the first admin user. Only works when no users exist or `ALLOW_REGISTRATION=true`.
 
 **Auth:** None
 
@@ -61,6 +61,8 @@ Register the first admin user. Only works when no users exist.
 }
 ```
 
+Also sets an `auth_token` cookie.
+
 ---
 
 #### `POST /api/auth/login`
@@ -72,11 +74,14 @@ Authenticate and receive a JWT token.
 ```json
 {
   "email": "admin@example.com",
-  "password": "secret"
+  "password": "secret",
+  "totp_code": "123456"
 }
 ```
 
-**Response:**
+`totp_code` is only required when 2FA is enabled on the account.
+
+**Response (2FA not enabled or code provided):**
 ```json
 {
   "token": "<jwt>",
@@ -90,6 +95,27 @@ Authenticate and receive a JWT token.
   }
 }
 ```
+
+**Response (2FA required, code not provided) — HTTP 202:**
+```json
+{ "requires_totp": true }
+```
+
+Also sets an `auth_token` cookie on success.
+
+---
+
+#### `POST /api/auth/logout`
+Revoke the current session token.
+
+**Auth:** Required (Bearer token or cookie)
+
+**Response:**
+```json
+{ "logged_out": true }
+```
+
+Also clears the `auth_token` cookie.
 
 ---
 
@@ -112,6 +138,100 @@ Get the currently authenticated user.
 
 ---
 
+#### `POST /api/auth/change-password`
+Change the current user's password.
+
+**Auth:** Required
+
+**Body:**
+```json
+{
+  "current_password": "old-secret",
+  "new_password": "new-secret"
+}
+```
+
+**Response:**
+```json
+{ "ok": true }
+```
+
+---
+
+#### `GET /api/auth/2fa/status`
+Check whether 2FA is currently enabled for the authenticated user.
+
+**Auth:** Required
+
+**Response:**
+```json
+{ "enabled": true }
+```
+
+---
+
+#### `POST /api/auth/2fa/setup`
+Generate a TOTP secret and QR code URI to configure an authenticator app.
+
+**Auth:** Required
+
+**Response:**
+```json
+{
+  "secret": "BASE32SECRET",
+  "qr_code": "data:image/png;base64,...",
+  "uri": "otpauth://totp/LCCM:admin@example.com?secret=...&issuer=LCCM"
+}
+```
+
+---
+
+#### `POST /api/auth/2fa/enable`
+Enable 2FA after verifying the authenticator app is configured correctly.
+
+**Auth:** Required
+
+**Body:**
+```json
+{ "code": "123456" }
+```
+
+**Response:**
+```json
+{ "enabled": true }
+```
+
+---
+
+#### `POST /api/auth/2fa/disable`
+Disable 2FA for the current user.
+
+**Auth:** Required
+
+**Body:**
+```json
+{ "code": "123456" }
+```
+
+**Response:**
+```json
+{ "disabled": true }
+```
+
+---
+
+#### `POST /api/auth/2fa/admin-disable/{user_id}`
+Admin endpoint to disable 2FA for any user without requiring their TOTP code.
+
+**Auth:** Required — `admin`
+
+**Response:**
+```json
+{ "disabled": true }
+```
+
+---
+
 ### Accounts
 
 #### `GET /api/accounts`
@@ -125,6 +245,7 @@ List all accounts accessible to the authenticated user.
   {
     "id": "uuid",
     "name": "Production",
+    "sync_interval_minutes": 360,
     "last_sync_at": "2026-01-01T00:00:00Z",
     "last_evaluated_at": "2026-01-01T00:00:00Z",
     "created_at": "2026-01-01T00:00:00Z",
@@ -145,15 +266,19 @@ Create a new account.
 {
   "name": "Production",
   "api_token": "linode-api-token",
-  "webhook_api_key": "optional-key"
+  "webhook_api_key": "optional-key",
+  "sync_interval_minutes": 360
 }
 ```
+
+`sync_interval_minutes` overrides the global sync schedule for this account. Omit to use the global default.
 
 **Response:**
 ```json
 {
   "id": "uuid",
   "name": "Production",
+  "sync_interval_minutes": 360,
   "created_at": "2026-01-01T00:00:00Z",
   "updated_at": "2026-01-01T00:00:00Z"
 }
@@ -173,6 +298,7 @@ Get details for a specific account.
   "name": "Production",
   "api_token": "linode-api-token",
   "webhook_api_key": "optional-key",
+  "sync_interval_minutes": 360,
   "last_sync_at": "2026-01-01T00:00:00Z",
   "last_evaluated_at": "2026-01-01T00:00:00Z",
   "created_at": "2026-01-01T00:00:00Z",
@@ -192,7 +318,8 @@ Update an account.
 {
   "name": "New Name",
   "api_token": "new-token",
-  "webhook_api_key": "new-key"
+  "webhook_api_key": "new-key",
+  "sync_interval_minutes": 720
 }
 ```
 
@@ -201,7 +328,7 @@ Update an account.
 ---
 
 #### `DELETE /api/accounts/{account_id}`
-Delete an account.
+Delete an account and all associated data.
 
 **Auth:** Required — `admin`
 
@@ -224,8 +351,9 @@ List resources for an account.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `account_id` | string | Yes | Account ID |
-| `resource_type` | string | No | Filter by type (e.g. `linode`, `nodebalancer`) |
+| `resource_type` | string | No | Filter by type (e.g. `linode`, `nodebalancer`, `volume`, `database`, `firewall`, `vpc`, `lke_cluster`, `object_storage`) |
 | `region` | string | No | Filter by region |
+| `include_deleted` | boolean | No | Include soft-deleted resources (default `false`) |
 
 **Response:** Array of resource objects.
 
@@ -245,7 +373,7 @@ Get the 50 most recent sync snapshots for a resource.
 
 **Auth:** Required
 
-**Response:** Array of snapshot objects.
+**Response:** Array of snapshot objects ordered by most recent first.
 
 ---
 
@@ -303,7 +431,22 @@ Get the current compliance score for an account.
 |-----------|------|----------|
 | `account_id` | string | Yes |
 
-**Response:** Latest score history record.
+**Response:**
+```json
+{
+  "account_id": "uuid",
+  "compliance_score": 85.3,
+  "compliant_count": 142,
+  "non_compliant_count": 25,
+  "total_checks": 167,
+  "evaluated_at": "2026-01-01T00:00:00Z",
+  "rule_breakdown": {
+    "critical": { "compliant": 40, "non_compliant": 10 },
+    "warning": { "compliant": 60, "non_compliant": 10 },
+    "info": { "compliant": 42, "non_compliant": 5 }
+  }
+}
+```
 
 ---
 
@@ -314,12 +457,12 @@ Get compliance score history for an account.
 
 **Query Parameters:**
 
-| Parameter | Type | Required | Default |
-|-----------|------|----------|---------|
-| `account_id` | string | Yes | — |
-| `limit` | integer | No | 30 |
+| Parameter | Type | Required | Default | Max |
+|-----------|------|----------|---------|-----|
+| `account_id` | string | Yes | — | — |
+| `limit` | integer | No | 30 | 500 |
 
-**Response:** Array of score history objects.
+**Response:** Array of score history objects ordered by most recent first.
 
 ---
 
@@ -349,7 +492,7 @@ Acknowledge or un-acknowledge a compliance result.
 ---
 
 #### `PUT /api/compliance/results/bulk-acknowledge`
-Acknowledge or un-acknowledge multiple compliance results.
+Acknowledge or un-acknowledge multiple compliance results in one request.
 
 **Auth:** Required
 
@@ -411,7 +554,7 @@ Get all notes for a compliance result.
 ---
 
 #### `GET /api/compliance/resources/{resource_id}/timeline`
-Get compliance timeline for a resource.
+Get the compliance history for a specific resource.
 
 **Auth:** Required
 
@@ -459,14 +602,14 @@ List all compliance rules.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `account_id` | string | No | If provided, includes account-specific rule overrides |
+| `account_id` | string | No | If provided, includes account-specific override status |
 
 **Response:** Array of rule objects.
 
 ---
 
 #### `GET /api/compliance/rules/overrides`
-Get rule overrides for an account.
+Get all rule overrides for an account.
 
 **Auth:** Required
 
@@ -476,14 +619,14 @@ Get rule overrides for an account.
 |-----------|------|----------|
 | `account_id` | string | Yes |
 
-**Response:** Array of override objects.
+**Response:** Array of rule override objects.
 
 ---
 
 #### `PUT /api/compliance/rules/{rule_id}/override`
-Enable or disable a rule for an account.
+Enable or disable a rule for a specific account.
 
-**Auth:** Required — `admin`
+**Auth:** Required — `power_user` or `admin`
 
 **Query Parameters:**
 
@@ -526,9 +669,9 @@ Get rule configuration override for an account.
 ---
 
 #### `PUT /api/compliance/rules/{rule_id}/config`
-Set rule configuration override for an account.
+Set a rule configuration override for an account.
 
-**Auth:** Required — `admin`
+**Auth:** Required — `power_user` or `admin`
 
 **Body:**
 ```json
@@ -567,9 +710,9 @@ Get active profiles for an account.
 ---
 
 #### `PUT /api/compliance/profiles/active`
-Set active profiles for an account.
+Set the full list of active profiles for an account (replaces existing selection).
 
-**Auth:** Required — `admin`
+**Auth:** Required — `power_user` or `admin`
 
 **Query Parameters:**
 
@@ -590,9 +733,9 @@ Set active profiles for an account.
 ---
 
 #### `PUT /api/compliance/profiles/{profile_id}/activate`
-Activate or deactivate a profile for an account.
+Activate or deactivate a single profile for an account.
 
-**Auth:** Required — `admin`
+**Auth:** Required — `power_user` or `admin`
 
 **Body:**
 ```json
@@ -624,7 +767,7 @@ List reports for an account.
 ---
 
 #### `POST /api/reports`
-Create a new compliance report.
+Create a new compliance report snapshot.
 
 **Auth:** Required
 
@@ -636,9 +779,12 @@ Create a new compliance report.
   "description": "Quarterly review",
   "period_start": "2026-01-01T00:00:00Z",
   "period_end": "2026-03-31T23:59:59Z",
-  "quarter": "Q1 2026"
+  "quarter": "Q1 2026",
+  "include_deleted": false
 }
 ```
+
+`include_deleted` — when `true`, soft-deleted resources are included in the snapshot (default `false`).
 
 **Response:** Full report object including generated snapshot.
 
@@ -700,15 +846,15 @@ List Linode events for an account.
 
 **Query Parameters:**
 
-| Parameter | Type | Required | Default |
-|-----------|------|----------|---------|
-| `account_id` | string | Yes | — |
-| `action` | string | No | — |
-| `entity_type` | string | No | — |
-| `status` | string | No | — |
-| `username` | string | No | — |
-| `limit` | integer | No | 200 |
-| `offset` | integer | No | 0 |
+| Parameter | Type | Required | Default | Max |
+|-----------|------|----------|---------|-----|
+| `account_id` | string | Yes | — | — |
+| `action` | string | No | — | — |
+| `entity_type` | string | No | — | — |
+| `status` | string | No | — | — |
+| `username` | string | No | — | — |
+| `limit` | integer | No | 200 | 1000 |
+| `offset` | integer | No | 0 | — |
 
 **Response:**
 ```json
@@ -755,7 +901,7 @@ Create a new user.
 }
 ```
 
-**Response:** User object.
+**Response:** User object (password not returned).
 
 ---
 
@@ -781,7 +927,7 @@ Update a user.
 ---
 
 #### `DELETE /api/users/{user_id}`
-Delete a user.
+Delete a user. Admins cannot delete their own account.
 
 **Auth:** Required — `admin`
 
@@ -862,6 +1008,7 @@ Trigger a sync and/or compliance evaluation.
   "skip_eval": false
 }
 ```
+
 Omit `account_id` to process all accounts.
 
 **Response:**
@@ -884,16 +1031,16 @@ Omit `account_id` to process all accounts.
 ---
 
 #### `GET /api/refresh`
-Trigger a sync via GET request (useful for webhooks/cron).
+Trigger a refresh via GET (useful for cron and webhooks).
 
-**Auth:** Optional — requires `REFRESH_API_SECRET` token via `?token=` param or Authorization header if configured.
+**Auth:** `REFRESH_API_SECRET` via `?token=` query parameter or `Authorization: Bearer` header.
 
 **Query Parameters:**
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `account_id` | string | No | Specific account to refresh |
-| `token` | string | No | API secret token |
+| `token` | string | No | API secret (alternative to Authorization header) |
 | `skip_sync` | boolean | No | Skip sync phase |
 | `skip_eval` | boolean | No | Skip evaluation phase |
 
@@ -901,8 +1048,43 @@ Trigger a sync via GET request (useful for webhooks/cron).
 
 ---
 
+#### `GET /api/refresh/scheduled`
+Lightweight scheduled sync that only processes accounts that are actually due for a refresh based on their configured sync interval. Intended for use with high-frequency cron jobs.
+
+**Auth:** `REFRESH_API_SECRET` via `?token=` query parameter or `Authorization: Bearer` header.
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `token` | string | No | API secret (alternative to Authorization header) |
+
+**Response (all accounts fresh):**
+```json
+{
+  "skipped": true,
+  "reason": "All accounts are up to date",
+  "accounts_due": 0,
+  "accounts_fresh": 3
+}
+```
+
+**Response (accounts processed):**
+```json
+{
+  "skipped": false,
+  "accounts_due": 2,
+  "accounts_fresh": 1,
+  "results": [...],
+  "log": [...],
+  "completed_at": "2026-01-01T00:00:00Z"
+}
+```
+
+---
+
 #### `GET /api/refresh/stream`
-Stream sync progress as Server-Sent Events (SSE).
+Trigger a refresh and stream progress as Server-Sent Events (SSE).
 
 **Auth:** Required — `power_user` or `admin`
 
@@ -917,19 +1099,22 @@ Stream sync progress as Server-Sent Events (SSE).
 **Response:** `Content-Type: text/event-stream`
 
 Event types:
-- `phase` — Phase started (`sync` or `evaluate`)
-- `sync_done` — Sync completed with resource count
-- `eval_done` — Evaluation completed
-- `log` — Log message string
-- `done` — Final summary object
-- `error` — Error message string
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `phase` | `"sync"` or `"evaluate"` | Phase started |
+| `sync_done` | `{ "count": 34 }` | Sync completed |
+| `eval_done` | `{}` | Evaluation completed |
+| `log` | string | Log message |
+| `done` | summary object | Final result |
+| `error` | string | Error message |
 
 ---
 
 ### Admin
 
 #### `POST /api/admin/run-migrations`
-Run pending database migrations.
+Run any pending database migrations.
 
 **Auth:** Required — `admin`
 
@@ -937,6 +1122,240 @@ Run pending database migrations.
 ```json
 { "success": true, "message": "Migrations completed" }
 ```
+
+---
+
+#### `POST /api/admin/prune-tokens`
+Delete expired and revoked JWT tokens from the database.
+
+**Auth:** Required — `admin`
+
+**Response:**
+```json
+{ "success": true, "deleted": 42 }
+```
+
+---
+
+#### `GET /api/admin/settings/sync-schedule`
+Get the global default sync interval.
+
+**Auth:** Required — `admin`
+
+**Response:**
+```json
+{ "interval_minutes": 360 }
+```
+
+---
+
+#### `PUT /api/admin/settings/sync-schedule`
+Update the global default sync interval (minimum 5 minutes). Individual accounts can override this with their own `sync_interval_minutes`.
+
+**Auth:** Required — `admin`
+
+**Body:**
+```json
+{ "interval_minutes": 360 }
+```
+
+**Response:**
+```json
+{ "success": true, "interval_minutes": 360 }
+```
+
+---
+
+### MCP API Keys
+
+The MCP key endpoints manage API keys used to authenticate with the MCP server.
+
+#### `GET /api/mcp/keys`
+List MCP API keys for the current user.
+
+**Auth:** Required
+
+**Response:**
+```json
+[
+  {
+    "id": "uuid",
+    "name": "My AI Assistant",
+    "key_prefix": "mcp_abc123",
+    "is_active": true,
+    "created_at": "2026-01-01T00:00:00Z",
+    "expires_at": null
+  }
+]
+```
+
+Full key values are never returned after creation.
+
+---
+
+#### `POST /api/mcp/keys`
+Create a new MCP API key.
+
+**Auth:** Required
+
+**Body:**
+```json
+{
+  "name": "My AI Assistant",
+  "expires_at": "2027-01-01T00:00:00Z"
+}
+```
+
+`expires_at` is optional. Omit for a non-expiring key.
+
+**Response:**
+```json
+{
+  "id": "uuid",
+  "name": "My AI Assistant",
+  "key_prefix": "mcp_abc123",
+  "raw_key": "mcp_abc123xxxxxxxxxxxxxxxx",
+  "created_at": "2026-01-01T00:00:00Z",
+  "note": "Save this key — it will not be shown again."
+}
+```
+
+---
+
+#### `PUT /api/mcp/keys/{key_id}`
+Update a key's name or active status.
+
+**Auth:** Required (key owner only)
+
+**Body** (all fields optional):
+```json
+{
+  "name": "Updated Name",
+  "is_active": false
+}
+```
+
+**Response:** Updated key object.
+
+---
+
+#### `DELETE /api/mcp/keys/{key_id}`
+Delete an MCP API key.
+
+**Auth:** Required (key owner only)
+
+**Response:**
+```json
+{ "ok": true }
+```
+
+---
+
+#### `GET /api/mcp/keys/settings`
+Get global MCP settings.
+
+**Auth:** Required — `admin`
+
+**Response:**
+```json
+{ "mcp_enabled": true }
+```
+
+---
+
+#### `PUT /api/mcp/keys/settings`
+Enable or disable the MCP server globally.
+
+**Auth:** Required — `admin`
+
+**Body:**
+```json
+{ "mcp_enabled": true }
+```
+
+**Response:**
+```json
+{ "mcp_enabled": true }
+```
+
+---
+
+### MCP Server
+
+The MCP (Model Context Protocol) server allows AI assistants to interact with LCCM. All MCP endpoints authenticate via an MCP API key passed as a Bearer token (`Authorization: Bearer <mcp_key>`) or via the `X-MCP-Key` header.
+
+#### `POST /api/mcp`
+Streamable HTTP transport (MCP spec 2024-11-05). Accepts a single JSON-RPC 2.0 message or a batch array.
+
+**Auth:** MCP API key
+
+**Body:** JSON-RPC 2.0 request
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "get_compliance_score",
+    "arguments": { "account_id": "uuid" }
+  }
+}
+```
+
+**Response:** JSON-RPC 2.0 response.
+
+---
+
+#### `GET /api/mcp/sse`
+SSE transport (v1). Opens a Server-Sent Events stream and returns an endpoint URL for sending messages.
+
+**Auth:** MCP API key
+
+**Response:** `Content-Type: text/event-stream`
+
+---
+
+#### `GET /api/mcp/sse/v2`
+SSE transport (v2) with bidirectional session support.
+
+**Auth:** MCP API key
+
+**Response:** `Content-Type: text/event-stream`
+
+---
+
+#### `POST /api/mcp/message`
+Send a JSON-RPC message to an active SSE session.
+
+**Auth:** MCP API key
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `session` | string | No | Session ID for v2 SSE transport |
+
+**Body:** JSON-RPC 2.0 request
+
+**Response:** JSON-RPC 2.0 response, or acknowledgement if response is queued to SSE session.
+
+---
+
+#### MCP Tools
+
+The following tools are available via the `tools/call` method:
+
+| Tool | Description | Required role |
+|------|-------------|---------------|
+| `list_accounts` | List all accounts accessible to the key owner | Any |
+| `get_compliance_score` | Get current compliance score for an account | Any |
+| `list_compliance_results` | List compliance findings (filterable by status, severity, resource type) | Any |
+| `list_resources` | List cloud resources for an account | Any |
+| `get_resource` | Get details for a single resource | Any |
+| `list_events` | List recent Linode events for an account | Any |
+| `get_reports` | List compliance reports for an account | Any |
+| `get_account_status` | Get sync and evaluation status for an account | Any |
+| `trigger_sync` | Trigger a manual sync and evaluation | `power_user` or `admin` |
 
 ---
 
@@ -951,3 +1370,25 @@ Health check endpoint.
 ```json
 { "status": "ok", "timestamp": "2026-01-01T00:00:00Z" }
 ```
+
+---
+
+## Error Responses
+
+All error responses follow this shape:
+
+```json
+{ "detail": "Error message describing what went wrong" }
+```
+
+Common HTTP status codes:
+
+| Code | Meaning |
+|------|---------|
+| `400` | Bad request — invalid input |
+| `401` | Unauthorized — missing or invalid token |
+| `403` | Forbidden — insufficient role or no account access |
+| `404` | Not found |
+| `409` | Conflict — e.g. duplicate email |
+| `422` | Validation error — request body failed schema validation |
+| `500` | Internal server error |
