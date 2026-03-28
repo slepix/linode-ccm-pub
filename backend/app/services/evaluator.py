@@ -471,21 +471,33 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
             rules_to_check.extend(specs.get("inbound_rules_detail", []))
         if check_out:
             rules_to_check.extend(specs.get("outbound_rules_detail", []))
+        violations = []
         for r in rules_to_check:
             if r.get("action") not in actions:
                 continue
             proto = r.get("protocol", "").upper()
             if proto in ("ICMP", "IPENCAP"):
                 continue
-            addrs = r.get("addresses", {})
-            ipv4s = addrs.get("ipv4", [])
-            ipv6s = addrs.get("ipv6", [])
-            all_addrs = ipv4s + ipv6s
-            if all_addrs and not any(_is_open_address(a) for a in all_addrs):
-                continue
-            ports = r.get("ports", "")
-            if proto == "ALL" or not ports or ports == "1-65535":
-                return "non_compliant", f"Rule '{r.get('label', '')}' allows traffic on all ports."
+            ports = r.get("ports")
+            ports_normalized = str(ports).replace(" ", "") if ports is not None else ""
+            all_ports = (
+                proto == "ALL"
+                or ports is None
+                or ports_normalized == ""
+                or ports_normalized in ("1-65535", "0-65535")
+                or (
+                    "-" in ports_normalized
+                    and "," not in ports_normalized
+                    and len(ports_normalized.split("-")) == 2
+                    and int(ports_normalized.split("-")[0]) <= 1
+                    and int(ports_normalized.split("-")[1]) >= 65535
+                )
+            )
+            if all_ports:
+                violations.append(r.get("label", "unnamed"))
+        if violations:
+            labels = ", ".join(f"'{l}'" for l in violations)
+            return "non_compliant", f"Rules allowing traffic on all ports: {labels}."
         return "compliant", None
 
     # --- firewall_rule_descriptions ---
@@ -493,9 +505,10 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
         if not resource:
             return "not_applicable", None
         all_rules = specs.get("inbound_rules_detail", []) + specs.get("outbound_rules_detail", [])
-        for r in all_rules:
-            if not (r.get("description") or "").strip():
-                return "non_compliant", f"Rule '{r.get('label', 'unnamed')}' is missing a description."
+        missing = [r.get("label", "unnamed") for r in all_rules if not (r.get("description") or "").strip()]
+        if missing:
+            labels = ", ".join(f"'{l}'" for l in missing)
+            return "non_compliant", f"Rules missing a description: {labels}."
         return "compliant", None
 
     # --- bucket_cors_check ---
