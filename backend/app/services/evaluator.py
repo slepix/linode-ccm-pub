@@ -318,15 +318,27 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
         for u in users:
             if u.get("user_type") in exclude:
                 continue
+            username = u.get("username", "unknown")
             tfa = u.get("tfa_enabled", False)
-            status = "compliant" if tfa else "non_compliant"
-            detail = None if tfa else f"User '{u['username']}' does not have TFA enabled."
-            results.append((status, detail))
+            password_created = u.get("password_created", None)
+            if password_created is None:
+                results.append(("not_applicable", f"User '{username}' authenticates via an external provider (GitHub/Google/Akamai Control Center); TFA is managed by that provider."))
+            elif tfa:
+                results.append(("compliant", None))
+            else:
+                results.append(("non_compliant", f"User '{username}' does not have TFA enabled."))
         if not results:
             return "not_applicable", "No users found."
         non_comp = [r for r in results if r[0] == "non_compliant"]
         if non_comp:
             return "non_compliant", "; ".join(r[1] for r in non_comp if r[1])
+        compliant_or_na = [r for r in results if r[0] in ("compliant", "not_applicable")]
+        if len(compliant_or_na) == len(results):
+            na_notes = [r[1] for r in results if r[0] == "not_applicable"]
+            if all(r[0] == "not_applicable" for r in results):
+                return "not_applicable", " ".join(na_notes)
+            if na_notes:
+                return "compliant", "Note: " + " ".join(na_notes)
         return "compliant", None
 
     # --- login_allowed_ips (account-level, live API) ---
