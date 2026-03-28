@@ -22,6 +22,7 @@ def list_resources(
     account_id: str = Query(...),
     resource_type: Optional[str] = Query(None),
     region: Optional[str] = Query(None),
+    include_deleted: bool = Query(False),
     current_user=Depends(get_current_user),
     db=Depends(get_db),
 ):
@@ -29,8 +30,12 @@ def list_resources(
         raise HTTPException(status_code=403, detail="Access denied")
 
     cur = db.cursor()
-    conditions = ["account_id = %s", "deleted_at IS NULL"]
+    conditions = ["account_id = %s"]
     params = [account_id]
+    if not include_deleted:
+        conditions.append("deleted_at IS NULL")
+    else:
+        conditions.append("deleted_at IS NOT NULL")
     if resource_type:
         conditions.append("resource_type = %s")
         params.append(resource_type)

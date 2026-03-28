@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Server, HardDrive, Database, Cloud, Shield, Network, Box, Loader2, ChevronDown, ChevronRight, Download, Clock, Globe } from 'lucide-react';
+import { Server, HardDrive, Database, Cloud, Shield, Network, Box, Loader2, ChevronDown, ChevronRight, Download, Clock, Globe, Trash2 } from 'lucide-react';
 import { LinodeAccount } from '../api/accounts';
 import { resourcesApi, Resource } from '../api/resources';
 import { complianceApi } from '../api/compliance';
@@ -129,20 +129,21 @@ export default function ResourcesPage({ account }: Props) {
   const [resources, setResources] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(false);
   const [filterRegion, setFilterRegion] = useState('');
+  const [showDeleted, setShowDeleted] = useState(false);
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set());
   const [expandedResource, setExpandedResource] = useState<string | null>(null);
   const [timelineResource, setTimelineResource] = useState<Resource | null>(null);
   useEffect(() => {
     if (!account) return;
     setLoading(true);
-    resourcesApi.list(account.id, undefined, filterRegion || undefined)
+    resourcesApi.list(account.id, undefined, filterRegion || undefined, showDeleted)
       .then(data => {
         setResources(data);
         const types = [...new Set(data.map(r => r.resource_type))];
         setExpandedTypes(new Set(types));
       })
       .finally(() => setLoading(false));
-  }, [account, filterRegion]);
+  }, [account, filterRegion, showDeleted]);
 
   if (!account) {
     return (
@@ -181,19 +182,34 @@ export default function ResourcesPage({ account }: Props) {
           <div>
             <h1 className="text-2xl font-bold text-lntext">Resources</h1>
             <p className="text-lnmuted text-sm mt-1">
-              {account.name} · {filtered.length} resource{filtered.length !== 1 ? 's' : ''} across {sortedTypes.length} type{sortedTypes.length !== 1 ? 's' : ''}
+              {account.name} · {filtered.length} {showDeleted ? 'deleted ' : ''}resource{filtered.length !== 1 ? 's' : ''} across {sortedTypes.length} type{sortedTypes.length !== 1 ? 's' : ''}
             </p>
           </div>
-          <select
-            value={filterRegion}
-            onChange={e => setFilterRegion(e.target.value)}
-            className="bg-lndark border border-lnborder rounded px-3 py-2 text-sm text-lntext focus:outline-none focus:border-lncyan2"
-          >
-            <option value="">All Regions</option>
-            {regions.map(r => (
-              <option key={r} value={r}>{r}</option>
-            ))}
-          </select>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => { setShowDeleted(v => !v); setFilterRegion(''); }}
+              className={`flex items-center gap-2 text-sm font-medium px-3 py-2 rounded border transition-all ${
+                showDeleted
+                  ? 'bg-lnred/10 text-lnred border-lnred/30 hover:bg-lnred/20'
+                  : 'bg-lndark text-lnmuted border-lnborder hover:text-lntext hover:border-lnborder2'
+              }`}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {showDeleted ? 'Hide Deleted' : 'Show Deleted'}
+            </button>
+            {!showDeleted && (
+              <select
+                value={filterRegion}
+                onChange={e => setFilterRegion(e.target.value)}
+                className="bg-lndark border border-lnborder rounded px-3 py-2 text-sm text-lntext focus:outline-none focus:border-lncyan2"
+              >
+                <option value="">All Regions</option>
+                {regions.map(r => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            )}
+          </div>
         </div>
 
         {loading ? (
@@ -202,7 +218,9 @@ export default function ResourcesPage({ account }: Props) {
           </div>
         ) : filtered.length === 0 ? (
           <div className="bg-lndark rounded border border-lncard p-12 text-center">
-            <p className="text-lnmuted">No resources found. Run a sync to discover infrastructure.</p>
+            <p className="text-lnmuted">
+              {showDeleted ? 'No deleted resources found for this account.' : 'No resources found. Run a sync to discover infrastructure.'}
+            </p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -236,33 +254,54 @@ export default function ResourcesPage({ account }: Props) {
                           <tr className="border-b border-lncard">
                             <th className="text-left px-5 py-2.5 text-xs font-semibold text-lnfaint uppercase tracking-wider">Name</th>
                             <th className="text-left px-5 py-2.5 text-xs font-semibold text-lnfaint uppercase tracking-wider">Region</th>
-                            <th className="text-left px-5 py-2.5 text-xs font-semibold text-lnfaint uppercase tracking-wider">Status</th>
-                            <th className="text-left px-5 py-2.5 text-xs font-semibold text-lnfaint uppercase tracking-wider">Synced</th>
+                            {!showDeleted && <th className="text-left px-5 py-2.5 text-xs font-semibold text-lnfaint uppercase tracking-wider">Status</th>}
+                            {!showDeleted && <th className="text-left px-5 py-2.5 text-xs font-semibold text-lnfaint uppercase tracking-wider">Synced</th>}
+                            {showDeleted && <th className="text-left px-5 py-2.5 text-xs font-semibold text-lnred/60 uppercase tracking-wider">Deleted At</th>}
                           </tr>
                         </thead>
                         <tbody>
                           {items.map(r => (
                             <React.Fragment key={r.id}>
                               <tr
-                                className="border-b border-lncard last:border-0 hover:bg-lncard/40 cursor-pointer transition"
+                                className={`border-b border-lncard last:border-0 cursor-pointer transition ${showDeleted ? 'hover:bg-lnred/5 opacity-75 hover:opacity-100' : 'hover:bg-lncard/40'}`}
                                 onClick={() => setExpandedResource(expandedResource === r.id ? null : r.id)}
                               >
-                                <td className="px-5 py-3 text-sm text-lntext font-medium">{r.label}</td>
+                                <td className="px-5 py-3 text-sm font-medium">
+                                  <div className="flex items-center gap-2">
+                                    {showDeleted && <Trash2 className="w-3.5 h-3.5 text-lnred/60 flex-shrink-0" />}
+                                    <span className={showDeleted ? 'text-lnmuted line-through' : 'text-lntext'}>{r.label}</span>
+                                  </div>
+                                </td>
                                 <td className="px-5 py-3 text-xs text-lnmuted">{r.region || '—'}</td>
-                                <td className="px-5 py-3">
-                                  {r.status && (
-                                    <span className={`text-xs px-2 py-0.5 rounded capitalize ${STATUS_COLORS[r.status] || 'bg-lncard text-lnmuted'}`}>
-                                      {r.status}
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="px-5 py-3 text-xs text-lnfaint">
-                                  {r.last_synced_at ? new Date(r.last_synced_at).toLocaleString() : '—'}
-                                </td>
+                                {!showDeleted && (
+                                  <td className="px-5 py-3">
+                                    {r.status && (
+                                      <span className={`text-xs px-2 py-0.5 rounded capitalize ${STATUS_COLORS[r.status] || 'bg-lncard text-lnmuted'}`}>
+                                        {r.status}
+                                      </span>
+                                    )}
+                                  </td>
+                                )}
+                                {!showDeleted && (
+                                  <td className="px-5 py-3 text-xs text-lnfaint">
+                                    {r.last_synced_at ? new Date(r.last_synced_at).toLocaleString() : '—'}
+                                  </td>
+                                )}
+                                {showDeleted && (
+                                  <td className="px-5 py-3 text-xs text-lnred/70">
+                                    {r.deleted_at ? new Date(r.deleted_at).toLocaleString() : '—'}
+                                  </td>
+                                )}
                               </tr>
                               {expandedResource === r.id && (
                                 <tr className="border-b border-lncard">
-                                  <td colSpan={4} className="px-5 pb-5 pt-3">
+                                  <td colSpan={showDeleted ? 3 : 4} className="px-5 pb-5 pt-3">
+                                    {showDeleted && r.deleted_at && (
+                                      <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-lnred/5 border border-lnred/20 rounded text-xs text-lnred/80">
+                                        <Trash2 className="w-3.5 h-3.5 flex-shrink-0" />
+                                        This resource was deleted on {new Date(r.deleted_at).toLocaleString()}
+                                      </div>
+                                    )}
                                     <div className="flex items-center justify-between mb-3">
                                       <span />
                                       <div className="flex items-center gap-2">
@@ -273,7 +312,7 @@ export default function ResourcesPage({ account }: Props) {
                                           <Clock className="w-3.5 h-3.5" />
                                           Timeline
                                         </button>
-                                        <ExportDropdown resource={r} accountId={account.id} />
+                                        {!showDeleted && <ExportDropdown resource={r} accountId={account.id} />}
                                       </div>
                                     </div>
                                     <ResourceSpecsView resource={r} />
