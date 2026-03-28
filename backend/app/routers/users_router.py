@@ -62,7 +62,19 @@ _USER_ALLOWED_COLUMNS = frozenset({"full_name", "role", "is_active", "can_view_c
 
 @router.put("/{user_id}")
 def update_user(user_id: str, body: UserUpdate, current_user=Depends(require_admin), db=Depends(get_db)):
+    if str(current_user["id"]) == user_id and body.is_active is False:
+        raise HTTPException(status_code=400, detail="You cannot disable your own account")
+
     cur = db.cursor()
+
+    if body.is_active is False:
+        cur.execute(
+            "SELECT id FROM org_users WHERE role = 'admin' AND is_active = TRUE AND id != %s",
+            (user_id,),
+        )
+        if not cur.fetchone():
+            raise HTTPException(status_code=400, detail="Cannot disable the only active admin account")
+
     field_map: list[tuple[str, object]] = []
     if body.full_name is not None:
         field_map.append(("full_name", body.full_name))
