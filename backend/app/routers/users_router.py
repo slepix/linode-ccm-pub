@@ -14,7 +14,6 @@ class UserCreate(BaseModel):
     password: str
     full_name: str = ""
     role: Literal["admin", "power_user", "auditor"] = "auditor"
-    can_view_costs: bool = True
     can_view_compliance: bool = True
 
 
@@ -22,14 +21,12 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     role: Optional[Literal["admin", "power_user", "auditor"]] = None
     is_active: Optional[bool] = None
-    can_view_costs: Optional[bool] = None
     can_view_compliance: Optional[bool] = None
     password: Optional[str] = None
 
 
 class AccountAccessGrant(BaseModel):
     account_id: str
-    can_view_costs: bool = True
     can_view_compliance: bool = True
 
 
@@ -37,7 +34,7 @@ class AccountAccessGrant(BaseModel):
 def list_users(current_user=Depends(require_admin), db=Depends(get_db)):
     cur = db.cursor()
     cur.execute("""
-        SELECT id, email, full_name, role, is_active, can_view_costs, can_view_compliance,
+        SELECT id, email, full_name, role, is_active, can_view_compliance,
                COALESCE(totp_enabled, FALSE) as totp_enabled, created_at, updated_at
         FROM org_users ORDER BY full_name
     """)
@@ -53,14 +50,14 @@ def create_user(body: UserCreate, current_user=Depends(require_admin), db=Depend
     validate_password(body.password)
     pw_hash = hash_password(body.password)
     cur.execute("""
-        INSERT INTO org_users (email, password_hash, full_name, role, is_active, can_view_costs, can_view_compliance)
-        VALUES (%s,%s,%s,%s,TRUE,%s,%s)
+        INSERT INTO org_users (email, password_hash, full_name, role, is_active, can_view_compliance)
+        VALUES (%s,%s,%s,%s,TRUE,%s)
         RETURNING id, email, full_name, role, is_active
-    """, (body.email.lower(), pw_hash, body.full_name, body.role, body.can_view_costs, body.can_view_compliance))
+    """, (body.email.lower(), pw_hash, body.full_name, body.role, body.can_view_compliance))
     return dict(cur.fetchone())
 
 
-_USER_ALLOWED_COLUMNS = frozenset({"full_name", "role", "is_active", "can_view_costs", "can_view_compliance", "password_hash", "updated_at"})
+_USER_ALLOWED_COLUMNS = frozenset({"full_name", "role", "is_active", "can_view_compliance", "password_hash", "updated_at"})
 
 
 @router.put("/{user_id}")
@@ -73,8 +70,6 @@ def update_user(user_id: str, body: UserUpdate, current_user=Depends(require_adm
         field_map.append(("role", body.role))
     if body.is_active is not None:
         field_map.append(("is_active", body.is_active))
-    if body.can_view_costs is not None:
-        field_map.append(("can_view_costs", body.can_view_costs))
     if body.can_view_compliance is not None:
         field_map.append(("can_view_compliance", body.can_view_compliance))
     if body.password:
@@ -124,14 +119,14 @@ def get_user_access(user_id: str, current_user=Depends(require_admin), db=Depend
 def grant_access(user_id: str, body: AccountAccessGrant, current_user=Depends(require_admin), db=Depends(get_db)):
     cur = db.cursor()
     cur.execute("""
-        INSERT INTO user_account_access (user_id, account_id, granted_by, can_view_costs, can_view_compliance)
-        VALUES (%s,%s,%s,%s,%s)
+        INSERT INTO user_account_access (user_id, account_id, granted_by, can_view_compliance)
+        VALUES (%s,%s,%s,%s)
         ON CONFLICT (user_id, account_id) DO UPDATE
-        SET can_view_costs=%s, can_view_compliance=%s
+        SET can_view_compliance=%s
         RETURNING id
     """, (user_id, body.account_id, str(current_user["id"]),
-          body.can_view_costs, body.can_view_compliance,
-          body.can_view_costs, body.can_view_compliance))
+          body.can_view_compliance,
+          body.can_view_compliance))
     return {"granted": True}
 
 

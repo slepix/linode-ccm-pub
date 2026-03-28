@@ -110,7 +110,7 @@ _TOOLS = [
     },
     {
         "name": "get_resource",
-        "description": "Get full details of a single resource including specs and pricing.",
+        "description": "Get full details of a single resource including specs.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -452,7 +452,7 @@ def _handle_tool_call(name: str, arguments: dict, user: dict, db) -> dict:
                 params.append(arguments["region"])
             cur.execute(f"""
                 SELECT id, resource_id, resource_type, label, region, status,
-                       monthly_cost, last_synced_at
+                       last_synced_at
                 FROM resources
                 WHERE account_id = %s{extra}
                 ORDER BY resource_type, label

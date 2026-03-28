@@ -120,7 +120,6 @@ function buildOcsfFinding(result: ComplianceResultWithNotes, resource: Resource)
         attributes: {
           plan_type: resource.plan_type ?? '',
           status: resource.status ?? '',
-          monthly_cost: resource.monthly_cost,
           last_synced_at: resource.last_synced_at ?? '',
         },
       },

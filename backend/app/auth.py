@@ -106,7 +106,7 @@ def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has been revoked")
 
     cur.execute(
-        "SELECT id, email, full_name, role, is_active, can_view_costs, can_view_compliance FROM org_users WHERE id = %s AND is_active = TRUE",
+        "SELECT id, email, full_name, role, is_active, can_view_compliance FROM org_users WHERE id = %s AND is_active = TRUE",
         (user_id,),
     )
     user = cur.fetchone()

@@ -5,7 +5,6 @@ export interface User {
   email: string;
   full_name: string;
   role: 'admin' | 'power_user' | 'auditor';
-  can_view_costs: boolean;
   can_view_compliance: boolean;
 }
 

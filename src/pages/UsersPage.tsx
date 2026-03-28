@@ -11,7 +11,6 @@ interface OrgUser {
   full_name: string;
   role: string;
   is_active: boolean;
-  can_view_costs: boolean;
   can_view_compliance: boolean;
   totp_enabled: boolean;
   created_at: string;
@@ -22,7 +21,6 @@ interface AccountAccess {
   user_id: string;
   account_id: string;
   account_name: string;
-  can_view_costs: boolean;
   can_view_compliance: boolean;
   granted_at: string;
 }
@@ -65,7 +63,7 @@ function AccountAccessModal({
     if (!selectedAccount) return;
     setSaving('grant');
     try {
-      await api.post(`/api/users/${user.id}/access`, { account_id: selectedAccount, can_view_costs: true, can_view_compliance: true });
+      await api.post(`/api/users/${user.id}/access`, { account_id: selectedAccount, can_view_compliance: true });
       setSelectedAccount('');
       await loadAccess();
     } finally {
@@ -156,9 +154,6 @@ function AccountAccessModal({
                         <div className="flex-1 min-w-0">
                           <div className="text-sm text-lntext font-medium truncate">{a.account_name}</div>
                           <div className="flex items-center gap-3 mt-0.5">
-                            <span className={`text-xs ${a.can_view_costs ? 'text-lngreen' : 'text-lnfaint'}`}>
-                              {a.can_view_costs ? 'Costs visible' : 'No cost view'}
-                            </span>
                             <span className={`text-xs ${a.can_view_compliance ? 'text-lngreen' : 'text-lnfaint'}`}>
                               {a.can_view_compliance ? 'Compliance visible' : 'No compliance view'}
                             </span>

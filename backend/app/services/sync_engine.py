@@ -163,8 +163,7 @@ def _write_to_db(account_id: str, data: dict, db, log: list, now: datetime) -> t
 
     def upsert_resource(resource_id: str, resource_type: str, label: str,
                         region: str | None, status: str | None,
-                        specs: dict, pricing: dict | None,
-                        plan_type: str | None, monthly_cost: float,
+                        specs: dict, plan_type: str | None,
                         resource_created_at: str | None) -> str:
         cur.execute("""
             SELECT id, specs FROM resources
@@ -177,39 +176,39 @@ def _write_to_db(account_id: str, data: dict, db, log: list, now: datetime) -> t
             old_specs = existing["specs"] or {}
             diff = _diff(old_specs, specs)
             cur.execute("""
-                UPDATE resources SET label=%s, region=%s, status=%s, specs=%s, pricing=%s,
-                    plan_type=%s, monthly_cost=%s, resource_created_at=%s,
+                UPDATE resources SET label=%s, region=%s, status=%s, specs=%s,
+                    plan_type=%s, resource_created_at=%s,
                     last_synced_at=%s, updated_at=NOW()
                 WHERE id=%s
-            """, (label, region, status, json.dumps(specs), json.dumps(pricing) if pricing else None,
-                  plan_type, monthly_cost,
+            """, (label, region, status, json.dumps(specs),
+                  plan_type,
                   resource_created_at, now, rid))
             if diff:
                 cur.execute("""
                     INSERT INTO resource_snapshots
                     (resource_id, account_id, resource_type, label, region, plan_type,
-                     monthly_cost, status, specs, diff, synced_at)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                     status, specs, diff, synced_at)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """, (rid, account_id, resource_type, label, region, plan_type,
-                      monthly_cost, status, json.dumps(specs), json.dumps(diff), now))
+                      status, json.dumps(specs), json.dumps(diff), now))
         else:
             cur.execute("""
                 INSERT INTO resources
-                (account_id, resource_id, resource_type, label, region, status, specs, pricing,
-                 plan_type, monthly_cost, resource_created_at, last_synced_at)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                (account_id, resource_id, resource_type, label, region, status, specs,
+                 plan_type, resource_created_at, last_synced_at)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 RETURNING id
             """, (account_id, resource_id, resource_type, label, region, status,
-                  json.dumps(specs), json.dumps(pricing) if pricing else None,
-                  plan_type, monthly_cost, resource_created_at, now))
+                  json.dumps(specs),
+                  plan_type, resource_created_at, now))
             rid = str(cur.fetchone()["id"])
             cur.execute("""
                 INSERT INTO resource_snapshots
                 (resource_id, account_id, resource_type, label, region, plan_type,
-                 monthly_cost, status, specs, diff, synced_at)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,NULL,%s)
+                 status, specs, diff, synced_at)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,NULL,%s)
             """, (rid, account_id, resource_type, label, region, plan_type,
-                  monthly_cost, status, json.dumps(specs), now))
+                  status, json.dumps(specs), now))
         return rid
 
     logmsg("Writing firewalls...")
@@ -231,7 +230,7 @@ def _write_to_db(account_id: str, data: dict, db, log: list, now: datetime) -> t
         }
         rid = upsert_resource(
             str(fw["id"]), "firewall", fw["label"], None, fw.get("status"),
-            specs, None, None, 0, fw.get("created")
+            specs, None, fw.get("created")
         )
         synced_resource_ids.add(rid)
         resource_count += 1
@@ -263,7 +262,7 @@ def _write_to_db(account_id: str, data: dict, db, log: list, now: datetime) -> t
         }
         rid = upsert_resource(
             str(ln["id"]), "linode", ln["label"], ln.get("region"),
-            ln.get("status"), specs, None, ln.get("type"), 0, ln.get("created")
+            ln.get("status"), specs, ln.get("type"), ln.get("created")
         )
         linode_db_ids[ln["id"]] = rid
         synced_resource_ids.add(rid)
@@ -281,7 +280,7 @@ def _write_to_db(account_id: str, data: dict, db, log: list, now: datetime) -> t
         }
         rid = upsert_resource(
             str(v["id"]), "volume", v["label"], v.get("region"),
-            v.get("status"), specs, None, None, 0, v.get("created")
+            v.get("status"), specs, None, v.get("created")
         )
         synced_resource_ids.add(rid)
         resource_count += 1
@@ -304,7 +303,7 @@ def _write_to_db(account_id: str, data: dict, db, log: list, now: datetime) -> t
         }
         rid = upsert_resource(
             str(nb["id"]), "nodebalancer", nb["label"], nb.get("region"),
-            None, specs, None, None, 0, nb.get("created")
+            None, specs, None, nb.get("created")
         )
         synced_resource_ids.add(rid)
         resource_count += 1
@@ -327,7 +326,7 @@ def _write_to_db(account_id: str, data: dict, db, log: list, now: datetime) -> t
         }
         rid = upsert_resource(
             str(cl["id"]), "lke_cluster", cl["label"], cl.get("region"),
-            cl.get("status"), specs, None, None, 0, cl.get("created")
+            cl.get("status"), specs, None, cl.get("created")
         )
         synced_resource_ids.add(rid)
         resource_count += 1
@@ -348,7 +347,7 @@ def _write_to_db(account_id: str, data: dict, db, log: list, now: datetime) -> t
         rid = upsert_resource(
             bucket_key, "object_storage", b["label"],
             b.get("region", b.get("cluster")),
-            None, specs, None, None, 0, b.get("created")
+            None, specs, None, b.get("created")
         )
         synced_resource_ids.add(rid)
         resource_count += 1
@@ -378,7 +377,7 @@ def _write_to_db(account_id: str, data: dict, db, log: list, now: datetime) -> t
         }
         rid = upsert_resource(
             str(db_item["id"]), "database", db_item["label"], db_item.get("region"),
-            db_item.get("status"), specs, None, db_item.get("type"), 0, db_item.get("created")
+            db_item.get("status"), specs, db_item.get("type"), db_item.get("created")
         )
         synced_resource_ids.add(rid)
         resource_count += 1
@@ -405,7 +404,7 @@ def _write_to_db(account_id: str, data: dict, db, log: list, now: datetime) -> t
         }
         rid = upsert_resource(
             str(dom["id"]), "domain", dom["domain"], None,
-            dom.get("status"), specs, None, None, 0, dom.get("created")
+            dom.get("status"), specs, None, dom.get("created")
         )
         synced_resource_ids.add(rid)
         resource_count += 1
@@ -426,7 +425,7 @@ def _write_to_db(account_id: str, data: dict, db, log: list, now: datetime) -> t
         }
         rid = upsert_resource(
             str(vpc["id"]), "vpc", vpc["label"], vpc.get("region"),
-            None, specs, None, None, 0, vpc.get("created")
+            None, specs, None, vpc.get("created")
         )
         vpc_db_ids[vpc["id"]] = rid
         synced_resource_ids.add(rid)

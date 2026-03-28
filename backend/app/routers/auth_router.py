@@ -145,7 +145,7 @@ def login(body: LoginRequest, db=Depends(get_db)):
     cur = db.cursor()
     cur.execute(
         """SELECT id, email, full_name, role, is_active, password_hash,
-                  can_view_costs, can_view_compliance, totp_enabled, totp_secret
+                  can_view_compliance, totp_enabled, totp_secret
            FROM org_users WHERE email = %s AND is_active = TRUE""",
         (body.email.lower(),),
     )
@@ -179,7 +179,6 @@ def login(body: LoginRequest, db=Depends(get_db)):
             "email": user["email"],
             "full_name": user["full_name"],
             "role": user["role"],
-            "can_view_costs": user["can_view_costs"],
             "can_view_compliance": user["can_view_compliance"],
         },
     }
@@ -217,7 +216,6 @@ def me(current_user=Depends(get_current_user)):
         "email": current_user["email"],
         "full_name": current_user["full_name"],
         "role": current_user["role"],
-        "can_view_costs": current_user["can_view_costs"],
         "can_view_compliance": current_user["can_view_compliance"],
     }
 

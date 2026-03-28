@@ -9,9 +9,7 @@ export interface Resource {
   region?: string;
   status?: string;
   specs?: Record<string, unknown>;
-  pricing?: Record<string, unknown>;
   plan_type?: string;
-  monthly_cost: number;
   resource_created_at?: string;
   last_synced_at?: string;
   deleted_at?: string;
