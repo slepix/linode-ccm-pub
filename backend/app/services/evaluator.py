@@ -477,6 +477,12 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
             proto = r.get("protocol", "").upper()
             if proto in ("ICMP", "IPENCAP"):
                 continue
+            addrs = r.get("addresses", {})
+            ipv4s = addrs.get("ipv4", [])
+            ipv6s = addrs.get("ipv6", [])
+            all_addrs = ipv4s + ipv6s
+            if all_addrs and not any(_is_open_address(a) for a in all_addrs):
+                continue
             ports = r.get("ports", "")
             if proto == "ALL" or not ports or ports == "1-65535":
                 return "non_compliant", f"Rule '{r.get('label', '')}' allows traffic on all ports."
