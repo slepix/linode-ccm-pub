@@ -77,6 +77,7 @@ export interface CreateReportPayload {
   period_start: string;
   period_end: string;
   quarter?: string;
+  include_deleted?: boolean;
 }
 
 export const reportsApi = {

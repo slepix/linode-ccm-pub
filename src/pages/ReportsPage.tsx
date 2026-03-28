@@ -121,6 +121,7 @@ function CreateReportDialog({ account, onClose, onCreate }: CreateDialogProps) {
   const [customEnd, setCustomEnd] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [includeDeleted, setIncludeDeleted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -168,6 +169,7 @@ function CreateReportDialog({ account, onClose, onCreate }: CreateDialogProps) {
         period_start: start.toISOString(),
         period_end: end.toISOString(),
         quarter,
+        include_deleted: includeDeleted,
       });
       onCreate(report);
     } catch (err: unknown) {
@@ -309,6 +311,20 @@ function CreateReportDialog({ account, onClose, onCreate }: CreateDialogProps) {
               className="w-full bg-lncard border border-lnborder rounded px-3 py-2.5 text-sm text-lntext placeholder-lnfaint focus:outline-none focus:border-lncyan2 transition-colors resize-none"
             />
           </div>
+
+          <button
+            type="button"
+            onClick={() => setIncludeDeleted(v => !v)}
+            className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded border border-lnborder bg-lncard/40 hover:border-lnborder2 transition-colors text-left"
+          >
+            <div>
+              <div className="text-sm font-medium text-lntext">Include deleted resources</div>
+              <div className="text-xs text-lnfaint mt-0.5">Useful for historical reports covering resources that no longer exist</div>
+            </div>
+            <div className={`relative shrink-0 w-9 h-5 rounded-full transition-colors ${includeDeleted ? 'bg-lncyan2' : 'bg-lnborder'}`}>
+              <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${includeDeleted ? 'translate-x-4' : 'translate-x-0'}`} />
+            </div>
+          </button>
 
           {error && (
             <div className="flex items-center gap-2 text-sm text-lnred bg-lnred/10 border border-lnred/40 rounded px-3 py-2.5">

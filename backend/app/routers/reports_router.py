@@ -38,6 +38,7 @@ class CreateReportRequest(BaseModel):
     period_start: str
     period_end: str
     quarter: Optional[str] = None
+    include_deleted: Optional[bool] = False
 
 
 @router.get("")
@@ -131,7 +132,7 @@ def create_report(
     )
     db.commit()
 
-    snapshot = _build_snapshot(body.account_id, period_start, period_end, db)
+    snapshot = _build_snapshot(body.account_id, period_start, period_end, db, include_deleted=body.include_deleted or False)
 
     cur.execute(
         "UPDATE reports SET status = 'ready', snapshot = %s, updated_at = now() WHERE id = %s",
@@ -162,11 +163,13 @@ def delete_report(
     return {"success": True}
 
 
-def _build_snapshot(account_id: str, period_start: datetime, period_end: datetime, db) -> dict:
+def _build_snapshot(account_id: str, period_start: datetime, period_end: datetime, db, include_deleted: bool = False) -> dict:
     cur = db.cursor()
 
+    res_join = "LEFT JOIN resources res ON res.id = cr.resource_id" if include_deleted else "JOIN resources res ON res.id = cr.resource_id AND res.deleted_at IS NULL"
+
     cur.execute(
-        """
+        f"""
         SELECT
             cr.id, cr.rule_id, cr.resource_id, cr.status, cr.detail,
             cr.acknowledged, cr.acknowledged_at, cr.acknowledged_note,
@@ -175,7 +178,7 @@ def _build_snapshot(account_id: str, period_start: datetime, period_end: datetim
             res.label as resource_label, res.resource_type, res.region
         FROM compliance_results cr
         JOIN compliance_rules rule ON rule.id = cr.rule_id
-        LEFT JOIN resources res ON res.id = cr.resource_id
+        {res_join}
         WHERE cr.account_id = %s
           AND cr.evaluated_at >= %s
           AND cr.evaluated_at <= %s
@@ -193,7 +196,7 @@ def _build_snapshot(account_id: str, period_start: datetime, period_end: datetim
 
     if not results:
         cur.execute(
-            """
+            f"""
             SELECT
                 cr.id, cr.rule_id, cr.resource_id, cr.status, cr.detail,
                 cr.acknowledged, cr.acknowledged_at, cr.acknowledged_note,
@@ -202,7 +205,7 @@ def _build_snapshot(account_id: str, period_start: datetime, period_end: datetim
                 res.label as resource_label, res.resource_type, res.region
             FROM compliance_results cr
             JOIN compliance_rules rule ON rule.id = cr.rule_id
-            LEFT JOIN resources res ON res.id = cr.resource_id
+            {res_join}
             WHERE cr.account_id = %s
             ORDER BY cr.evaluated_at DESC
             """,
@@ -221,14 +224,15 @@ def _build_snapshot(account_id: str, period_start: datetime, period_end: datetim
     score_row = cur.fetchone()
     score = dict(score_row) if score_row else {}
 
+    deleted_filter = "" if include_deleted else "AND deleted_at IS NULL"
     cur.execute(
-        "SELECT COUNT(*) as total FROM resources WHERE account_id = %s",
+        f"SELECT COUNT(*) as total FROM resources WHERE account_id = %s {deleted_filter}",
         (account_id,),
     )
     resource_count = cur.fetchone()["total"]
 
     cur.execute(
-        "SELECT resource_type, COUNT(*) as count FROM resources WHERE account_id = %s GROUP BY resource_type",
+        f"SELECT resource_type, COUNT(*) as count FROM resources WHERE account_id = %s {deleted_filter} GROUP BY resource_type",
         (account_id,),
     )
     resources_by_type = {r["resource_type"]: r["count"] for r in cur.fetchall()}
