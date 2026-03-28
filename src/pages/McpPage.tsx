@@ -279,7 +279,7 @@ export default function McpPage() {
 
   const [keys, setKeys] = useState<McpApiKey[]>([]);
   const [loading, setLoading] = useState(true);
-  const [mcpEnabled, setMcpEnabled] = useState(true);
+  const [mcpEnabled, setMcpEnabled] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [newKey, setNewKey] = useState<CreatedMcpKey | null>(null);
   const [togglingGlobal, setTogglingGlobal] = useState(false);

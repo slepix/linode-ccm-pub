@@ -111,6 +111,35 @@ def create_key(body: CreateKeyRequest, current_user=Depends(get_current_user), d
     }
 
 
+@router.get("/settings")
+def get_mcp_settings(current_user=Depends(require_admin), db=Depends(get_db)):
+    cur = db.cursor()
+    cur.execute("SELECT value FROM app_settings WHERE key = 'mcp_enabled'")
+    row = cur.fetchone()
+    enabled = True
+    if row:
+        enabled = (row["value"] or "true").lower() not in ("false", "0", "no")
+    return {"mcp_enabled": enabled}
+
+
+@router.put("/settings")
+def update_mcp_settings(
+    body: dict,
+    current_user=Depends(require_admin),
+    db=Depends(get_db),
+):
+    enabled = body.get("mcp_enabled")
+    if not isinstance(enabled, bool):
+        raise HTTPException(status_code=400, detail="mcp_enabled must be a boolean")
+    cur = db.cursor()
+    cur.execute("""
+        INSERT INTO app_settings (key, value) VALUES ('mcp_enabled', %s)
+        ON CONFLICT (key) DO UPDATE SET value = %s, updated_at = NOW()
+    """, (str(enabled).lower(), str(enabled).lower()))
+    db.commit()
+    return {"mcp_enabled": enabled}
+
+
 @router.put("/{key_id}")
 def update_key(
     key_id: str,
@@ -162,32 +191,3 @@ def delete_key(
     cur.execute("DELETE FROM mcp_api_keys WHERE id = %s", (key_id,))
     db.commit()
     return {"ok": True}
-
-
-@router.get("/settings")
-def get_mcp_settings(current_user=Depends(require_admin), db=Depends(get_db)):
-    cur = db.cursor()
-    cur.execute("SELECT value FROM app_settings WHERE key = 'mcp_enabled'")
-    row = cur.fetchone()
-    enabled = True
-    if row:
-        enabled = (row["value"] or "true").lower() not in ("false", "0", "no")
-    return {"mcp_enabled": enabled}
-
-
-@router.put("/settings")
-def update_mcp_settings(
-    body: dict,
-    current_user=Depends(require_admin),
-    db=Depends(get_db),
-):
-    enabled = body.get("mcp_enabled")
-    if not isinstance(enabled, bool):
-        raise HTTPException(status_code=400, detail="mcp_enabled must be a boolean")
-    cur = db.cursor()
-    cur.execute("""
-        INSERT INTO app_settings (key, value) VALUES ('mcp_enabled', %s)
-        ON CONFLICT (key) DO UPDATE SET value = %s, updated_at = NOW()
-    """, (str(enabled).lower(), str(enabled).lower()))
-    db.commit()
-    return {"mcp_enabled": enabled}
