@@ -2,24 +2,21 @@ import React from 'react';
 import {
   Shield, LayoutDashboard, Server, ClipboardList,
   Users, ChevronDown, LogOut, Settings, Activity, ShieldCheck,
-  Database, RefreshCw, CheckCircle, AlertCircle, FileText, Clock, Terminal,
+  FileText, Clock, Terminal,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { runMigrations, getSyncSchedule, updateSyncSchedule } from '../api/admin';
+import { getSyncSchedule, updateSyncSchedule } from '../api/admin';
 
 interface SidebarProps {
   currentView: string;
   onNavigate: (view: string) => void;
 }
 
-type MigrationStatus = 'idle' | 'running' | 'success' | 'error';
 type SyncSaveStatus = 'idle' | 'saving' | 'success' | 'error';
 
 export default function Sidebar({ currentView, onNavigate }: SidebarProps) {
   const { user, logout } = useAuth();
   const [settingsOpen, setSettingsOpen] = React.useState(false);
-  const [migrationStatus, setMigrationStatus] = React.useState<MigrationStatus>('idle');
-  const [migrationMessage, setMigrationMessage] = React.useState('');
   const [syncInterval, setSyncInterval] = React.useState<number | ''>('');
   const [syncIntervalInput, setSyncIntervalInput] = React.useState('');
   const [syncSaveStatus, setSyncSaveStatus] = React.useState<SyncSaveStatus>('idle');
@@ -97,24 +94,6 @@ export default function Sidebar({ currentView, onNavigate }: SidebarProps) {
       setSyncSaveMessage(err instanceof Error ? err.message : 'Failed to save');
     } finally {
       setTimeout(() => { setSyncSaveStatus('idle'); setSyncSaveMessage(''); }, 4000);
-    }
-  }
-
-  async function handleRunMigrations() {
-    setMigrationStatus('running');
-    setMigrationMessage('');
-    try {
-      const result = await runMigrations();
-      setMigrationStatus('success');
-      setMigrationMessage(result.message);
-    } catch (err: unknown) {
-      setMigrationStatus('error');
-      setMigrationMessage(err instanceof Error ? err.message : 'Migration failed');
-    } finally {
-      setTimeout(() => {
-        setMigrationStatus('idle');
-        setMigrationMessage('');
-      }, 5000);
     }
   }
 
@@ -291,43 +270,6 @@ export default function Sidebar({ currentView, onNavigate }: SidebarProps) {
                         syncSaveStatus === 'success' ? 'text-lngreen' : 'text-lnred'
                       }`}>
                         {syncSaveMessage}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="border border-lnborder rounded overflow-hidden">
-                  <div className="px-3 py-2 bg-lnbg flex items-center gap-2 border-b border-lnborder">
-                    <Database className="w-3 h-3 text-lnfaint" />
-                    <span className="text-[10px] font-bold text-lnfaint uppercase tracking-widest">Database</span>
-                  </div>
-                  <div className="px-3 py-3 bg-lndark">
-                    <p className="text-xs text-lnfaint mb-3 leading-relaxed">
-                      Apply pending schema migrations.
-                    </p>
-                    <button
-                      onClick={handleRunMigrations}
-                      disabled={migrationStatus === 'running'}
-                      className={`w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded text-xs font-medium transition ${
-                        migrationStatus === 'running'
-                          ? 'bg-lnborder text-lnfaint cursor-not-allowed'
-                          : migrationStatus === 'success'
-                          ? 'bg-lngreen/10 text-lngreen border border-lngreen/30'
-                          : migrationStatus === 'error'
-                          ? 'bg-lnred/10 text-lnred border border-lnred/30'
-                          : 'bg-lncyan2 hover:bg-lncyan text-white'
-                      }`}
-                    >
-                      {migrationStatus === 'running' && <RefreshCw className="w-3 h-3 animate-spin" />}
-                      {migrationStatus === 'success' && <CheckCircle className="w-3 h-3" />}
-                      {migrationStatus === 'error' && <AlertCircle className="w-3 h-3" />}
-                      {migrationStatus === 'running' ? 'Running…' : 'Update DB'}
-                    </button>
-                    {migrationMessage && (
-                      <p className={`mt-2 text-xs leading-relaxed ${
-                        migrationStatus === 'success' ? 'text-lngreen' : 'text-lnred'
-                      }`}>
-                        {migrationMessage}
                       </p>
                     )}
                   </div>
