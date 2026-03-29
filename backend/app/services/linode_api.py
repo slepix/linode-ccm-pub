@@ -1,23 +1,65 @@
+import time
+import random
 import httpx
 from typing import Any, Optional
 from app.config import settings
+
+_DEFAULT_TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=5.0)
+_RETRY_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
+_MAX_RETRIES = 5
+_BACKOFF_BASE = 1.0
+_BACKOFF_MAX = 60.0
+
+
+def _backoff_delay(attempt: int, retry_after: Optional[str] = None) -> float:
+    if retry_after:
+        try:
+            return min(float(retry_after), _BACKOFF_MAX)
+        except (ValueError, TypeError):
+            pass
+    delay = _BACKOFF_BASE * (2 ** attempt) + random.uniform(0, 1)
+    return min(delay, _BACKOFF_MAX)
 
 
 class LinodeClient:
     def __init__(self, api_token: str):
         self.token = api_token
         self.base = settings.LINODE_API_BASE
-        self.headers = {
-            "Authorization": f"Bearer {api_token}",
-            "Content-Type": "application/json",
-        }
+        self._client = httpx.Client(
+            headers={
+                "Authorization": f"Bearer {api_token}",
+                "Content-Type": "application/json",
+            },
+            timeout=_DEFAULT_TIMEOUT,
+            http2=False,
+        )
+
+    def close(self):
+        self._client.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
+
+    def _request(self, path: str, params: Optional[dict] = None) -> httpx.Response:
+        url = f"{self.base}{path}"
+        for attempt in range(_MAX_RETRIES):
+            resp = self._client.get(url, params=params)
+            if resp.status_code not in _RETRY_STATUS_CODES:
+                return resp
+            if attempt < _MAX_RETRIES - 1:
+                delay = _backoff_delay(attempt, resp.headers.get("Retry-After"))
+                time.sleep(delay)
+        return resp
 
     def _get_all_pages(self, path: str, params: Optional[dict] = None) -> list:
         results = []
         page = 1
         while True:
             p = {"page": page, "page_size": 500, **(params or {})}
-            resp = httpx.get(f"{self.base}{path}", headers=self.headers, params=p, timeout=30)
+            resp = self._request(path, params=p)
             if resp.status_code == 404:
                 return []
             resp.raise_for_status()
@@ -29,7 +71,7 @@ class LinodeClient:
         return results
 
     def _get(self, path: str) -> Any:
-        resp = httpx.get(f"{self.base}{path}", headers=self.headers, timeout=30)
+        resp = self._request(path)
         if resp.status_code == 400:
             return {"_status": 400}
         if resp.status_code == 404:
@@ -68,10 +110,7 @@ class LinodeClient:
         return self._get_all_pages("/object-storage/buckets")
 
     def get_bucket_access(self, region: str, label: str) -> Any:
-        resp = httpx.get(
-            f"{self.base}/object-storage/buckets/{region}/{label}/access",
-            headers=self.headers, timeout=30
-        )
+        resp = self._request(f"/object-storage/buckets/{region}/{label}/access")
         if resp.status_code in (404, 400):
             return None
         if resp.is_success:
