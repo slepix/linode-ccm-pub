@@ -1,6 +1,7 @@
 import json
 from datetime import datetime, timezone
 from typing import Any
+from psycopg2.extras import execute_values
 from app.services.linode_api import LinodeClient
 
 
@@ -39,14 +40,37 @@ def _is_rfc1918(addr: str) -> bool:
     )
 
 
-def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
-                  api_token: str, client: LinodeClient) -> tuple[str, str | None]:
+class _AccountContext:
+    """
+    Lazily fetches and caches account-level API data so that multiple
+    account-level rules share a single API call per data type.
+    """
+
+    def __init__(self, client: LinodeClient):
+        self._client = client
+        self._users: list | None = None
+        self._logins: list | None = None
+
+    def users(self) -> list:
+        if self._users is None:
+            self._users = self._client.get_account_users()
+        return self._users
+
+    def logins(self) -> list:
+        if self._logins is None:
+            self._logins = self._client.get_account_logins()
+        return self._logins
+
+
+def evaluate_rule(rule: dict, resource: dict | None,
+                  resources_by_type: dict[str, list[dict]],
+                  api_token: str, client: LinodeClient,
+                  ctx: _AccountContext) -> tuple[str, str | None]:
     ct = rule["condition_type"]
     raw_cfg = rule["condition_config"] or {}
     if isinstance(raw_cfg, str):
-        import json as _json
         try:
-            raw_cfg = _json.loads(raw_cfg)
+            raw_cfg = json.loads(raw_cfg)
         except Exception:
             raw_cfg = {}
     cfg = raw_cfg
@@ -54,9 +78,8 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
     if resource:
         raw_specs = resource.get("specs") or {}
         if isinstance(raw_specs, str):
-            import json as _json
             try:
-                raw_specs = _json.loads(raw_specs)
+                raw_specs = json.loads(raw_specs)
             except Exception:
                 raw_specs = {}
         specs = raw_specs
@@ -68,7 +91,7 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
         attached = specs.get("attached_firewalls") or []
         if attached:
             return "compliant", None
-        fw_resources = [r for r in all_resources if r["resource_type"] == "firewall"]
+        fw_resources = resources_by_type.get("firewall", [])
         resource_id_str = str(resource.get("resource_id", ""))
         for fw in fw_resources:
             fw_specs = fw.get("specs") or {}
@@ -314,9 +337,9 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
             return "non_compliant", f"Bucket ACL '{acl}' is not allowed."
         return "compliant", None
 
-    # --- tfa_users (account-level, live API) ---
+    # --- tfa_users (account-level, cached) ---
     if ct == "tfa_users":
-        users = client.get_account_users()
+        users = ctx.users()
         exclude = cfg.get("exclude_user_types", ["proxy"])
         results = []
         for u in users:
@@ -345,12 +368,12 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
                 return "compliant", "Note: " + " ".join(na_notes)
         return "compliant", None
 
-    # --- login_allowed_ips (account-level, live API) ---
+    # --- login_allowed_ips (account-level, cached) ---
     if ct == "login_allowed_ips":
         allowed_ips = cfg.get("allowed_ips", [])
         if not allowed_ips:
             return "not_applicable", "No allowed IPs configured."
-        logins = client.get_account_logins()
+        logins = ctx.logins()
         violations = []
         seen = set()
         for login in logins:
@@ -380,16 +403,15 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
     if ct == "firewall_rules_check":
         if not resource:
             return "not_applicable", None
-        fw_resources = [r for r in all_resources if r["resource_type"] == "firewall"]
+        fw_resources = resources_by_type.get("firewall", [])
         resource_id_str = str(resource.get("resource_id", ""))
         matched_fw_specs = []
 
         for fw in fw_resources:
             fw_specs = fw.get("specs") or {}
             if isinstance(fw_specs, str):
-                import json as _json
                 try:
-                    fw_specs = _json.loads(fw_specs)
+                    fw_specs = json.loads(fw_specs)
                 except Exception:
                     fw_specs = {}
             for ent in fw_specs.get("entities", []):
@@ -413,9 +435,8 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
                     if str(fw.get("resource_id", "")) == fw_id:
                         fw_specs = fw.get("specs") or {}
                         if isinstance(fw_specs, str):
-                            import json as _json
                             try:
-                                fw_specs = _json.loads(fw_specs)
+                                fw_specs = json.loads(fw_specs)
                             except Exception:
                                 fw_specs = {}
                         matched_fw_specs.append(fw_specs)
@@ -632,10 +653,6 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
             return "not_applicable", None
         dangerous_ports = cfg.get("dangerous_ports", [25, 465, 587])
         outbound_rules = specs.get("outbound_rules_detail", [])
-        outbound_policy = specs.get("outbound_policy", "ACCEPT")
-        if outbound_policy == "ACCEPT" and not outbound_rules:
-            for dp in dangerous_ports:
-                pass
         violations = []
         for r in outbound_rules:
             if r.get("action") != "ACCEPT":
@@ -720,7 +737,6 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
     if ct == "db_backup_recency":
         if not resource:
             return "not_applicable", None
-        updated_at = specs.get("updated_at") or resource.get("updated_at")
         last_backup = specs.get("backups_last_successful") or specs.get("last_backup_at")
         if not last_backup:
             return "not_applicable", "No backup timestamp available for this database."
@@ -765,12 +781,12 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
             return "not_applicable", "Encryption status is unknown for this bucket."
         return ("compliant", None) if encryption else ("non_compliant", "Server-side encryption is not enabled on this bucket.")
 
-    # --- inactive_users ---
+    # --- inactive_users (account-level, cached) ---
     if ct == "inactive_users":
-        logins = client.get_account_logins()
+        logins = ctx.logins()
         max_days = cfg.get("max_inactive_days", 90)
         exclude = cfg.get("exclude_user_types", ["proxy"])
-        users = client.get_account_users()
+        users = ctx.users()
         active_usernames: dict[str, datetime] = {}
         for login in logins:
             uname = login.get("username", "")
@@ -801,9 +817,9 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
             return "non_compliant", "; ".join(inactive)
         return "compliant", None
 
-    # --- user_restricted_access ---
+    # --- user_restricted_access (account-level, cached) ---
     if ct == "user_restricted_access":
-        users = client.get_account_users()
+        users = ctx.users()
         exclude = cfg.get("exclude_user_types", ["proxy"])
         exclude_usernames = cfg.get("exclude_usernames", [])
         unrestricted = []
@@ -1015,9 +1031,9 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
         soa_email = (specs.get("soa_email") or "").strip()
         return ("compliant", None) if soa_email else ("non_compliant", "Domain is missing an SOA administrative contact email.")
 
-    # --- user_ssh_keys_configured ---
+    # --- user_ssh_keys_configured (account-level, cached) ---
     if ct == "user_ssh_keys_configured":
-        users = client.get_account_users()
+        users = ctx.users()
         exclude = cfg.get("exclude_user_types", ["proxy"])
         missing_keys = []
         for u in users:
@@ -1060,11 +1076,7 @@ def evaluate_rule(rule: dict, resource: dict | None, all_resources: list[dict],
 
 
 def evaluate_account(account_id: str, api_token: str, db, log: list) -> dict:
-    from datetime import datetime, timezone
-    import json
-
     now = datetime.now(timezone.utc)
-    client = LinodeClient(api_token)
     cur = db.cursor()
 
     def logmsg(msg: str):
@@ -1072,9 +1084,13 @@ def evaluate_account(account_id: str, api_token: str, db, log: list) -> dict:
 
     logmsg("Starting compliance evaluation...")
 
-    # --- Phase 1: Read all needed data from DB (hold connection briefly) ---
+    # --- Phase 1: Load from DB ---
     cur.execute("SELECT * FROM resources WHERE account_id = %s AND deleted_at IS NULL", (account_id,))
     all_resources = [dict(r) for r in cur.fetchall()]
+
+    resources_by_type: dict[str, list[dict]] = {}
+    for r in all_resources:
+        resources_by_type.setdefault(r["resource_type"], []).append(r)
 
     cur.execute("""
         SELECT DISTINCT unnest(cp.rule_condition_types) AS condition_type
@@ -1140,49 +1156,53 @@ def evaluate_account(account_id: str, api_token: str, db, log: list) -> dict:
         key = f"{row['rule_id']}:{row['resource_id'] or 'null'}"
         ack_map[key] = dict(row)
 
-    # --- Phase 2: Evaluate rules (may make external API calls, no DB connection held) ---
+    # --- Phase 2: Evaluate (API calls, no DB connection held) ---
     logmsg("Evaluating compliance rules...")
-    results_to_insert = []
 
-    for rule in rules:
-        rt = rule.get("resource_types") or []
-        ct = rule["condition_type"]
+    with LinodeClient(api_token) as client:
+        ctx = _AccountContext(client)
+        results_to_insert: list[tuple] = []
 
-        if ct == "composite":
-            continue
+        for rule in rules:
+            rt = rule.get("resource_types") or []
+            ct = rule["condition_type"]
 
-        if not rt:
-            status, detail = evaluate_rule(rule, None, all_resources, api_token, client)
-            key = f"{rule['id']}:null"
-            ack = ack_map.get(key, {})
-            results_to_insert.append((
-                rule["id"], None, account_id, status, detail,
-                ack.get("acknowledged", False), ack.get("acknowledged_at"),
-                ack.get("acknowledged_note"), ack.get("acknowledged_by"), now
-            ))
-        else:
-            matching = [r for r in all_resources if r["resource_type"] in rt]
-            for res in matching:
-                status, detail = evaluate_rule(rule, res, all_resources, api_token, client)
-                key = f"{rule['id']}:{res['id']}"
+            if ct == "composite":
+                continue
+
+            if not rt:
+                status, detail = evaluate_rule(rule, None, resources_by_type, api_token, client, ctx)
+                key = f"{rule['id']}:null"
                 ack = ack_map.get(key, {})
                 results_to_insert.append((
-                    rule["id"], res["id"], account_id, status, detail,
+                    rule["id"], None, account_id, status, detail,
                     ack.get("acknowledged", False), ack.get("acknowledged_at"),
                     ack.get("acknowledged_note"), ack.get("acknowledged_by"), now
                 ))
+            else:
+                for res in all_resources:
+                    if res["resource_type"] not in rt:
+                        continue
+                    status, detail = evaluate_rule(rule, res, resources_by_type, api_token, client, ctx)
+                    key = f"{rule['id']}:{res['id']}"
+                    ack = ack_map.get(key, {})
+                    results_to_insert.append((
+                        rule["id"], res["id"], account_id, status, detail,
+                        ack.get("acknowledged", False), ack.get("acknowledged_at"),
+                        ack.get("acknowledged_note"), ack.get("acknowledged_by"), now
+                    ))
 
-    # --- Phase 3: Write results back to DB ---
+    # --- Phase 3: Write results ---
     logmsg("Writing compliance results...")
     cur.execute("DELETE FROM compliance_results WHERE account_id = %s", (account_id,))
 
-    for row in results_to_insert:
-        cur.execute("""
+    if results_to_insert:
+        execute_values(cur, """
             INSERT INTO compliance_results
             (rule_id, resource_id, account_id, status, detail,
              acknowledged, acknowledged_at, acknowledged_note, acknowledged_by, evaluated_at)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-        """, row)
+            VALUES %s
+        """, results_to_insert)
 
     # Compute score
     total = len(results_to_insert)
@@ -1220,15 +1240,13 @@ def evaluate_account(account_id: str, api_token: str, db, log: list) -> dict:
     """, (account_id, now, total, compliant, non_compliant, not_applicable,
           acknowledged, score, len(rules), json.dumps(rule_breakdown)))
 
-    # Per-resource history
+    # Per-resource history (bulk)
     res_map: dict[str, list] = {}
     for row in results_to_insert:
         if row[1]:
             res_id = str(row[1])
-            if res_id not in res_map:
-                res_map[res_id] = []
             rule = rule_map.get(str(row[0]))
-            res_map[res_id].append({
+            res_map.setdefault(res_id, []).append({
                 "rule_id": str(row[0]),
                 "rule_name": rule["name"] if rule else "",
                 "severity": rule["severity"] if rule else "info",
@@ -1236,11 +1254,16 @@ def evaluate_account(account_id: str, api_token: str, db, log: list) -> dict:
                 "detail": row[4],
                 "acknowledged": row[5],
             })
-    for res_id, res_results in res_map.items():
-        cur.execute("""
+
+    if res_map:
+        history_rows = [
+            (account_id, res_id, now, json.dumps(res_results))
+            for res_id, res_results in res_map.items()
+        ]
+        execute_values(cur, """
             INSERT INTO resource_compliance_history (account_id, resource_id, evaluated_at, results)
-            VALUES (%s,%s,%s,%s)
-        """, (account_id, res_id, now, json.dumps(res_results)))
+            VALUES %s
+        """, history_rows)
 
     cur.execute("UPDATE linode_accounts SET last_evaluated_at=%s, updated_at=NOW() WHERE id=%s", (now, account_id))
 
